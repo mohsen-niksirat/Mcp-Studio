@@ -1,0 +1,41 @@
+{
+  "name": "mcp-studio",
+  "version": "1.0.0",
+  "description": "The visual IDE and testing studio for Model Context Protocol (MCP) servers.",
+  "type": "module",
+  "bin": {
+    "mcp-studio": "./bin/mcp-studio.js"
+  },
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter mcp-studio-server dev\" \"pnpm --filter mcp-studio-client dev\"",
+    "build": "pnpm --filter mcp-studio-client build && pnpm --filter mcp-studio-server build",
+    "start": "node server/dist/index.js",
+    "test": "pnpm --filter mcp-studio-server test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "developer-tools",
+    "ai",
+    "inspector",
+    "studio",
+    "json-rpc",
+    "claude",
+    "cursor"
+  ],
+  "author": "Mohsen Niksirat",
+  "license": "MIT"
+}
