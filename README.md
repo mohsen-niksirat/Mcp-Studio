@@ -6,6 +6,7 @@
 *The "Postman for MCP" — Connect, Inspect, Test, Benchmark, and Debug MCP Servers with Zero Friction.*
 
 [![Live Demo](https://img.shields.io/badge/⚡_Live_Demo-Open_in_Browser-6366f1?style=for-the-badge&logo=googlechrome&logoColor=white)](https://mohsen-niksirat.github.io/Mcp-Studio/)
+[![Windows Desktop](https://img.shields.io/badge/Windows-Download_.exe-blue?style=for-the-badge&logo=windows)](https://github.com/mohsen-niksirat/Mcp-Studio/releases)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-indigo.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)

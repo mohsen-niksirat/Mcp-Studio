@@ -1,0 +1,87 @@
+name: Release MCP-Studio Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 11.13.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm approve-builds --all
+
+      - name: Build Full Stack (Client & Server)
+        run: pnpm build
+
+      - name: Build Windows Desktop Executable
+        run: |
+          mkdir -p dist
+          cd desktop
+          go build -ldflags "-H windowsgui -s -w" -o "../dist/MCP-Studio.exe"
+          cd ..
+
+      - name: Package Release Archive
+        shell: pwsh
+        run: |
+          mkdir release-pkg
+          Copy-Item "dist/MCP-Studio.exe" -Destination "release-pkg/"
+          Copy-Item "README.md" -Destination "release-pkg/"
+          Copy-Item "LICENSE" -Destination "release-pkg/"
+          Copy-Item -Recurse "server/dist" -Destination "release-pkg/server/dist"
+          Copy-Item -Recurse "client/dist" -Destination "release-pkg/client/dist"
+          Copy-Item "server/package.json" -Destination "release-pkg/server/"
+          Compress-Archive -Path "release-pkg/*" -DestinationPath "MCP-Studio-${{ github.ref_name }}-windows-x64.zip"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'MCP-Studio ${{ github.ref_name }}'
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/MCP-Studio.exe
+            MCP-Studio-*.zip
+          body: |
+            ## 🚀 What's New in MCP-Studio ${{ github.ref_name }}
+
+            The open-source "Postman for Model Context Protocol (MCP)".
+
+            ### ✨ Key Features:
+            - **⚡ Windows Desktop App**: Single-click `MCP-Studio.exe` native launcher.
+            - **🤖 AI Chat Sandbox**: Test tools with autonomous AI agents (Google Gemini, local Ollama, and built-in simulator).
+            - **🛠️ Dynamic Schema Form Generator**: Auto-renders type-safe forms from JSON Schema.
+            - **🌐 In-Browser Web Demo**: 100% standalone simulation on GitHub Pages.
+            - **🔄 Multi-Server Manager**: Hot-switch between local `stdio` (Python/Node/uvx) and remote `SSE` servers.
+            - **📥 One-Click Config Importer**: Auto-scans Claude Desktop and Cursor configurations.
+            - **📡 Live Protocol Inspector**: Real-time JSON-RPC 2.0 streaming log with latency tracking.
+            - **⏱️ Health & Latency Benchmark**: Multi-round handshake latency profiling.
+
+            ### 📦 Installation
+            Download `MCP-Studio.exe` or `MCP-Studio-${{ github.ref_name }}-windows-x64.zip` below and run!
