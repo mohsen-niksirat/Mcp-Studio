@@ -5,13 +5,15 @@
 ### The Visual IDE & Testing Studio for Model Context Protocol (MCP) Servers
 *The "Postman for MCP" — Connect, Inspect, Test, Benchmark, and Debug MCP Servers with Zero Friction.*
 
+[![Live Demo](https://img.shields.io/badge/⚡_Live_Demo-Open_in_Browser-6366f1?style=for-the-badge&logo=googlechrome&logoColor=white)](https://mohsen-niksirat.github.io/Mcp-Studio/)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-indigo.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-emerald.svg)](https://modelcontextprotocol.io/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
 
-[**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**Roadmap**](#-roadmap)
+[**Live Web Demo**](https://mohsen-niksirat.github.io/Mcp-Studio/) • [**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**Roadmap**](#-roadmap)
 
 </div>
 

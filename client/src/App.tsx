@@ -47,8 +47,14 @@ export const App: React.FC = () => {
     loadServers();
     setupWebSocket();
 
+    // Listen to in-browser mock engine logs as well
+    const unsubscribeBrowserLogs = api.getBrowserAdapter().onLog((log) => {
+      setLogs((prev) => [...prev.slice(-300), log]);
+    });
+
     return () => {
       wsRef.current?.close();
+      unsubscribeBrowserLogs();
     };
   }, []);
 
