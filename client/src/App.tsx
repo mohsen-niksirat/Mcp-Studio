@@ -18,6 +18,8 @@ import { PromptsView } from './components/prompts/PromptsView';
 import { TrafficView } from './components/traffic/TrafficView';
 import { BenchmarkView } from './components/benchmark/BenchmarkView';
 import { ChatSandboxView } from './components/chat/ChatSandboxView';
+import { CollectionsView } from './components/collections/CollectionsView';
+import { CommandPalette } from './components/layout/CommandPalette';
 import { ServerModal } from './components/servers/ServerModal';
 
 export const App: React.FC = () => {
@@ -40,6 +42,7 @@ export const App: React.FC = () => {
   // Modals
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<'create' | 'import'>('create');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -48,12 +51,22 @@ export const App: React.FC = () => {
     loadServers();
     setupWebSocket();
 
+    // Global keyboard shortcut: Ctrl+K / Cmd+K
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+
     // Listen to in-browser mock engine logs as well
     const unsubscribeBrowserLogs = api.getBrowserAdapter().onLog((log) => {
       setLogs((prev) => [...prev.slice(-300), log]);
     });
 
     return () => {
+      window.removeEventListener('keydown', handleGlobalKey);
       wsRef.current?.close();
       unsubscribeBrowserLogs();
     };
@@ -195,6 +208,7 @@ export const App: React.FC = () => {
           loadServers();
           if (activeState?.status === 'connected') fetchActiveEntities();
         }}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnecting={isConnecting}
       />
 
@@ -237,6 +251,10 @@ export const App: React.FC = () => {
             <PromptsView prompts={prompts} isLoading={isLoadingEntities} />
           )}
 
+          {activeTab === 'collections' && (
+            <CollectionsView tools={tools} />
+          )}
+
           {activeTab === 'traffic' && (
             <TrafficView logs={logs} onClear={handleClearLogs} />
           )}
@@ -246,6 +264,26 @@ export const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Command Palette (Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setIsCommandPaletteOpen(false);
+        }}
+        tools={tools}
+        onOpenAddServer={() => {
+          setModalInitialTab('create');
+          setIsServerModalOpen(true);
+        }}
+        onOpenImport={() => {
+          setModalInitialTab('import');
+          setIsServerModalOpen(true);
+        }}
+        onClearLogs={handleClearLogs}
+      />
 
       {/* Add / Import Server Modal */}
       <ServerModal

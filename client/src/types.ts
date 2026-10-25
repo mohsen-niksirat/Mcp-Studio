@@ -94,7 +94,36 @@ export interface BenchmarkStats {
   }[];
 }
 
-export type ActiveTab = 'tools' | 'resources' | 'prompts' | 'traffic' | 'benchmark' | 'chat';
+export type ActiveTab = 'chat' | 'tools' | 'resources' | 'prompts' | 'collections' | 'traffic' | 'benchmark';
+
+export interface TestStep {
+  id: string;
+  toolName: string;
+  args: Record<string, any>;
+  expectedSubstring?: string;
+}
+
+export interface StepRunResult {
+  stepId: string;
+  toolName: string;
+  success: boolean;
+  latencyMs: number;
+  output?: string;
+  error?: string;
+}
+
+export interface TestSuite {
+  id: string;
+  name: string;
+  description?: string;
+  steps: TestStep[];
+  lastRun?: {
+    timestamp: number;
+    passed: boolean;
+    totalLatencyMs: number;
+    results: StepRunResult[];
+  };
+}
 
 export interface ChatToolCall {
   id: string;

@@ -9,7 +9,8 @@ import {
   Terminal,
   Radio,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Search
 } from 'lucide-react';
 import { ServerConfig, ServerState } from '../../types';
 
@@ -20,6 +21,7 @@ interface NavbarProps {
   onDisconnect: () => void;
   onOpenAddServer: () => void;
   onRefresh: () => void;
+  onOpenCommandPalette?: () => void;
   isConnecting: boolean;
 }
 
@@ -30,6 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onDisconnect,
   onOpenAddServer,
   onRefresh,
+  onOpenCommandPalette,
   isConnecting
 }) => {
   const isConnected = activeState?.status === 'connected';
@@ -137,6 +140,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="text-slate-600">•</span>
             <span>v{activeState.serverInfo.version}</span>
           </div>
+        )}
+
+        {onOpenCommandPalette && (
+          <button
+            onClick={onOpenCommandPalette}
+            className="hidden md:flex items-center space-x-2 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-xl transition-all"
+            title="Open Command Palette (Ctrl+K)"
+          >
+            <Search className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Search or jump...</span>
+            <kbd className="text-[10px] font-mono bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700">
+              Ctrl+K
+            </kbd>
+          </button>
         )}
 
         <button

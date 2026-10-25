@@ -8,7 +8,8 @@ import {
   Layers,
   FileCode,
   FileDown,
-  Bot
+  Bot,
+  ListChecks
 } from 'lucide-react';
 import { ActiveTab, ServerState } from '../../types';
 
@@ -62,6 +63,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Sparkles,
       badge: promptCount > 0 ? promptCount : undefined,
       description: 'Inspect & render prompt templates'
+    },
+    {
+      id: 'collections' as ActiveTab,
+      label: 'Test Suites',
+      icon: ListChecks,
+      description: 'Automated scenario runner & assertion tests'
     },
     {
       id: 'traffic' as ActiveTab,

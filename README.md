@@ -39,6 +39,8 @@ Building [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
 ## ✨ Features
 
 - 🤖 **AI Chat Sandbox**: Natural language agent interface supporting **Google Gemini**, **Ollama (local models)**, and OpenAI with automated function calling to test real-world tool execution.
+- 📋 **Test Collections & Scenario Runner**: Define multi-step sequential test suites with output assertions, total latency measurement, and JSON export/import (the Postman Collections for MCP!).
+- ⌨️ **Raycast-Style Command Palette (`Ctrl+K`)**: Instant fuzzy search across tools, workspaces, and actions from anywhere in the app.
 - 💻 **1-Click Code Snippet Generator**: Instantly generate copy-pasteable integration code in **Python**, **TypeScript**, and **cURL** for any executed tool.
 - 🔄 **Multi-Server Hot-Switching**: Manage multiple local (`stdio`: Python, Node, uvx, npx) and remote (`SSE`/HTTP) MCP servers in a single dashboard.
 - 📥 **One-Click Config Importer**: Automatically detects and imports existing server configurations from **Claude Desktop** and **Cursor** (`claude_desktop_config.json`, `.cursor/mcp.json`).
@@ -141,8 +143,11 @@ Connects to remote endpoints over HTTP streaming:
 - [x] Roundtrip latency benchmark suite
 - [x] In-Browser Standalone Web Demo (GitHub Pages ready)
 - [x] AI Chat Sandbox (Gemini, Ollama, OpenAI with automated function calling)
-- [ ] Exportable Postman-style test collections
-- [ ] Standalone desktop package (Tauri / Electron)
+- [x] 1-Click Code Snippet Generator (Python, TypeScript, cURL)
+- [x] Test Collections & Scenario Runner with assertions & JSON export
+- [x] Raycast-style Command Palette (Ctrl+K)
+- [x] Standalone Windows desktop package (.exe)
+- [ ] Direct LLM sampling sandbox (streaming server-initiated sampling)
 
 ---
 
