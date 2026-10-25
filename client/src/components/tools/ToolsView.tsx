@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ToolItem } from '../../types';
 import { DynamicSchemaForm } from './DynamicSchemaForm';
+import { CodeSnippetModal } from './CodeSnippetModal';
 import { api } from '../../lib/api';
 
 interface ToolsViewProps {
@@ -42,6 +43,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
   const [copied, setCopied] = useState(false);
   const [activeResultTab, setActiveResultTab] = useState<'formatted' | 'structured' | 'raw'>('formatted');
   const [history, setHistory] = useState<ExecutionHistoryItem[]>([]);
+  const [isSnippetOpen, setIsSnippetOpen] = useState(false);
 
   // Update selected tool if tools change
   React.useEffect(() => {
@@ -172,13 +174,24 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
           {/* Middle: Schema Form */}
           <div className="w-96 border-r border-slate-800 p-6 overflow-y-auto bg-[#0a0f1d] shrink-0">
             <div className="mb-4">
-              <div className="flex items-center space-x-2">
-                <span className="font-mono text-sm font-bold text-slate-100">
-                  {selectedTool.name}
-                </span>
-                <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                  tool
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-sm font-bold text-slate-100">
+                    {selectedTool.name}
+                  </span>
+                  <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                    tool
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setIsSnippetOpen(true)}
+                  className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-600/30 border border-indigo-500/20 rounded-lg transition-all"
+                  title="Generate Python/TypeScript code for this tool"
+                >
+                  <Code2 className="h-3 w-3" />
+                  <span>Snippet</span>
+                </button>
               </div>
               {selectedTool.description && (
                 <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -193,6 +206,13 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
               onChange={setFormValues}
               onSubmit={handleExecute}
               isLoading={isExecuting}
+            />
+
+            <CodeSnippetModal
+              isOpen={isSnippetOpen}
+              onClose={() => setIsSnippetOpen(false)}
+              tool={selectedTool}
+              args={formValues}
             />
           </div>
 

@@ -16,6 +16,10 @@
 
 [**Live Web Demo**](https://mohsen-niksirat.github.io/Mcp-Studio/) • [**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**Roadmap**](#-roadmap)
 
+<br/>
+
+<img src="./assets/hero-banner.svg" alt="MCP-Studio Banner" width="100%"/>
+
 </div>
 
 ---
@@ -35,6 +39,7 @@ Building [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
 ## ✨ Features
 
 - 🤖 **AI Chat Sandbox**: Natural language agent interface supporting **Google Gemini**, **Ollama (local models)**, and OpenAI with automated function calling to test real-world tool execution.
+- 💻 **1-Click Code Snippet Generator**: Instantly generate copy-pasteable integration code in **Python**, **TypeScript**, and **cURL** for any executed tool.
 - 🔄 **Multi-Server Hot-Switching**: Manage multiple local (`stdio`: Python, Node, uvx, npx) and remote (`SSE`/HTTP) MCP servers in a single dashboard.
 - 📥 **One-Click Config Importer**: Automatically detects and imports existing server configurations from **Claude Desktop** and **Cursor** (`claude_desktop_config.json`, `.cursor/mcp.json`).
 - 🛠️ **Dynamic Schema Form Generator**: Parses tool JSON Schemas and automatically renders type-safe inputs (strings, numbers, enums, booleans, and nested JSON editors) with instant schema validation.
