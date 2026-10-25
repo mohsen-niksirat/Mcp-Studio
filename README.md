@@ -33,6 +33,7 @@ Building [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
 
 ## ✨ Features
 
+- 🤖 **AI Chat Sandbox**: Natural language agent interface supporting **Google Gemini**, **Ollama (local models)**, and OpenAI with automated function calling to test real-world tool execution.
 - 🔄 **Multi-Server Hot-Switching**: Manage multiple local (`stdio`: Python, Node, uvx, npx) and remote (`SSE`/HTTP) MCP servers in a single dashboard.
 - 📥 **One-Click Config Importer**: Automatically detects and imports existing server configurations from **Claude Desktop** and **Cursor** (`claude_desktop_config.json`, `.cursor/mcp.json`).
 - 🛠️ **Dynamic Schema Form Generator**: Parses tool JSON Schemas and automatically renders type-safe inputs (strings, numbers, enums, booleans, and nested JSON editors) with instant schema validation.
@@ -132,8 +133,9 @@ Connects to remote endpoints over HTTP streaming:
 - [x] Auto-import from Claude Desktop & Cursor
 - [x] Live JSON-RPC traffic streaming over WebSocket
 - [x] Roundtrip latency benchmark suite
+- [x] In-Browser Standalone Web Demo (GitHub Pages ready)
+- [x] AI Chat Sandbox (Gemini, Ollama, OpenAI with automated function calling)
 - [ ] Exportable Postman-style test collections
-- [ ] Direct LLM sampling sandbox (test tools directly with Claude/Gemini)
 - [ ] Standalone desktop package (Tauri / Electron)
 
 ---

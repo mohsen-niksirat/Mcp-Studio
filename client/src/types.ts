@@ -94,4 +94,33 @@ export interface BenchmarkStats {
   }[];
 }
 
-export type ActiveTab = 'tools' | 'resources' | 'prompts' | 'traffic' | 'benchmark';
+export type ActiveTab = 'tools' | 'resources' | 'prompts' | 'traffic' | 'benchmark' | 'chat';
+
+export interface ChatToolCall {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+  result?: any;
+  status: 'calling' | 'success' | 'error';
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  toolCalls?: ChatToolCall[];
+  timestamp: number;
+}
+
+export type AIProvider = 'mock' | 'gemini' | 'ollama' | 'openai';
+
+export interface ChatConfig {
+  provider: AIProvider;
+  apiKey?: string;
+  model: string;
+  endpoint?: string;
+  systemPrompt?: string;
+  temperature?: number;
+}

@@ -17,6 +17,7 @@ import { ResourcesView } from './components/resources/ResourcesView';
 import { PromptsView } from './components/prompts/PromptsView';
 import { TrafficView } from './components/traffic/TrafficView';
 import { BenchmarkView } from './components/benchmark/BenchmarkView';
+import { ChatSandboxView } from './components/chat/ChatSandboxView';
 import { ServerModal } from './components/servers/ServerModal';
 
 export const App: React.FC = () => {
@@ -216,6 +217,10 @@ export const App: React.FC = () => {
 
         {/* Viewport Content */}
         <main className="flex-1 flex overflow-hidden">
+          {activeTab === 'chat' && (
+            <ChatSandboxView tools={tools} />
+          )}
+
           {activeTab === 'tools' && (
             <ToolsView tools={tools} isLoading={isLoadingEntities} />
           )}

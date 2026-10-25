@@ -7,7 +7,8 @@ import {
   Zap,
   Layers,
   FileCode,
-  FileDown
+  FileDown,
+  Bot
 } from 'lucide-react';
 import { ActiveTab, ServerState } from '../../types';
 
@@ -33,6 +34,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenImport
 }) => {
   const navItems = [
+    {
+      id: 'chat' as ActiveTab,
+      label: 'AI Chat Sandbox',
+      icon: Bot,
+      badge: 'AI',
+      badgeColor: 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-bold',
+      description: 'Test tools with autonomous LLM agent'
+    },
     {
       id: 'tools' as ActiveTab,
       label: 'Tools Runner',
