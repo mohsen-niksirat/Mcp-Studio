@@ -31,6 +31,9 @@ export function createChatProxyRouter(fetchImpl: FetchLike = fetch): Router {
       return res.status(400).json({ error: 'apiKey is required' });
     }
     const modelName = typeof model === 'string' && model ? model : 'gemini-2.0-flash';
+    if (!/^[A-Za-z0-9._-]+$/.test(modelName)) {
+      return res.status(400).json({ error: 'model must be a valid model identifier' });
+    }
     // The key travels in the x-goog-api-key header, never as a URL query param.
     forwardUpstream(res, fetchImpl, `${GEMINI_BASE_URL}/models/${modelName}:generateContent`, {
       'Content-Type': 'application/json',
@@ -73,7 +76,13 @@ function forwardUpstream(
         return;
       }
       // Stream the upstream body straight through to the client.
-      Readable.fromWeb(upstream.body).pipe(res);
+      const passthrough = Readable.fromWeb(upstream.body);
+      passthrough.on('error', () => {
+        // Headers are already sent; all we can do is tear the connection down
+        // instead of leaving it hanging (or crashing on an unhandled error).
+        res.destroy();
+      });
+      passthrough.pipe(res);
     })
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);

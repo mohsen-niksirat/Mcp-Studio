@@ -174,6 +174,56 @@ async function runTests() {
     console.log('✅ Upstream error status and body are propagated');
   }
 
+  // 6. Upstream stream failing mid-flight must not hang the client or crash the process
+  {
+    const failingFetch: FetchLike = async () => ({
+      status: 200,
+      headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new Error('upstream stream blew up'));
+        }
+      })
+    });
+    const { server, port } = await startServer(createChatProxyRouter(failingFetch));
+
+    let settled = false;
+    const attempt = fetch(`http://127.0.0.1:${port}/api/chat/gemini`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: SECRET_KEY, model: 'gemini-2.0-flash', payload: {} })
+    })
+      .then(() => {
+        settled = true;
+      })
+      .catch(() => {
+        settled = true; // a reset connection is an acceptable outcome
+      });
+    await Promise.race([attempt, new Promise((_, reject) => setTimeout(() => reject(new Error('client request hung')), 5000))]);
+    await attempt;
+
+    server.close();
+    assert(settled, 'client request should settle instead of hanging forever');
+    console.log('✅ Upstream stream failure neither hangs the client nor crashes the process');
+  }
+
+  // 7. A crafted model identifier must be rejected before it reaches the upstream URL
+  {
+    const { calls, fetchImpl } = makeStubFetch(200, {});
+    const { server, port } = await startServer(createChatProxyRouter(fetchImpl));
+
+    const { status } = await postJson(port, '/api/chat/gemini', {
+      apiKey: SECRET_KEY,
+      model: 'evil/../../v1beta/models/x?key=leak',
+      payload: {}
+    });
+
+    server.close();
+    assert.strictEqual(status, 400, 'crafted model identifiers should be rejected with 400');
+    assert.strictEqual(calls.length, 0, 'nothing should be forwarded for an invalid model');
+    console.log('✅ Invalid model identifiers are rejected before reaching the upstream URL');
+  }
+
   console.log('\n🎉 ALL CHAT PROXY TESTS PASSED!\n');
 }
 

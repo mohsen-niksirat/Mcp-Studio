@@ -29,7 +29,6 @@ export class MCPClientManager extends EventEmitter {
   private rpcIdCounter = 1;
   private pendingRequests: Map<string | number, PendingRequest> = new Map();
   private stdoutBuffer = '';
-  private intentionalDisconnect = false;
 
   constructor() {
     super();
@@ -147,8 +146,6 @@ export class MCPClientManager extends EventEmitter {
       throw new Error('stdio transport requires a command (e.g. npx, node, python)');
     }
 
-    this.intentionalDisconnect = false;
-
     return new Promise((resolve, reject) => {
       try {
         const env = {
@@ -167,12 +164,17 @@ export class MCPClientManager extends EventEmitter {
         this.stdoutBuffer = '';
 
         proc.on('error', (err: any) => {
+          this.activeProcess = null;
           this.activeState = {
             config,
             status: 'error',
             error: `Failed to spawn process: ${err.message}`
           };
           this.emit('state:changed', this.activeState);
+          for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
+            this.pendingRequests.delete(id);
+            pending.reject(err);
+          }
           reject(err);
         });
 
@@ -193,35 +195,31 @@ export class MCPClientManager extends EventEmitter {
         });
 
         proc.on('exit', (code: any, signal: any) => {
+          // Stale exit: this process was replaced or intentionally killed, so
+          // disconnect()/connect() already own the state transition.
+          if (this.activeProcess !== proc) {
+            return;
+          }
           console.log(`[MCP stdio exit]: code=${code}, signal=${signal}`);
           this.activeProcess = null;
 
-          const wasIntentional = this.intentionalDisconnect;
-          this.intentionalDisconnect = false;
-
-          const message = wasIntentional
-            ? `Process exited with code ${code}`
-            : `MCP server process exited unexpectedly (code ${code}, signal ${signal})`;
-
+          const message = `MCP server process exited unexpectedly (code ${code}, signal ${signal})`;
           this.activeState = {
             config,
-            status: wasIntentional ? 'disconnected' : 'error',
-            error: code !== 0 || !wasIntentional ? message : undefined
+            status: 'error',
+            error: message
           };
           this.emit('state:changed', this.activeState);
-
-          if (!wasIntentional) {
-            this.emit('state:crashed', {
-              serverId: config.id,
-              config,
-              code,
-              signal,
-              error: message
-            });
-          }
+          this.emit('state:crashed', {
+            serverId: config.id,
+            config,
+            code,
+            signal,
+            error: message
+          });
 
           // A dead process can never answer in-flight RPCs; fail them with the
-          // exit reason so connect() surfaces the same message as the state.
+          // crash reason so connect() surfaces the same message as the state.
           for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
             this.pendingRequests.delete(id);
             pending.reject(new Error(message));
@@ -378,14 +376,22 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
-    this.intentionalDisconnect = true;
-    if (this.activeProcess) {
+    // Null the handle first: the exit handler treats a missing active process
+    // as a stale event and leaves the state transition to us.
+    const proc = this.activeProcess;
+    this.activeProcess = null;
+    if (proc) {
       try {
-        this.activeProcess.kill('SIGTERM');
+        proc.kill('SIGTERM');
       } catch (e) {
         // ignore
       }
-      this.activeProcess = null;
+    }
+
+    // Callers awaiting in-flight RPCs must not hang on a closed connection.
+    for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
+      this.pendingRequests.delete(id);
+      pending.reject(new Error('MCP server connection closed'));
     }
 
     if (this.activeState) {
