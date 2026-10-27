@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx test/index.test.ts",
+    "test": "tsx test/index.test.ts && tsx test/chat-proxy.test.ts && tsx test/crash-resilience.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

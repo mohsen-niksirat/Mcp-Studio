@@ -5,6 +5,7 @@ import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { MCPClientManager } from './mcp/client-manager.js';
 import { ConfigImporter } from './mcp/config-importer.js';
+import { createChatProxyRouter } from './chat/chat-proxy.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -58,6 +59,14 @@ clientManager.on('logs:cleared', () => {
   broadcast('logs:cleared', {});
 });
 
+clientManager.on('state:crashed', (payload) => {
+  broadcast('state:crashed', payload);
+});
+
+// Secure AI chat proxy: provider keys arrive in the request body and are
+// forwarded server-side so they never appear in any URL.
+app.use(createChatProxyRouter());
+
 // REST Endpoints
 app.get('/api/servers', (req, res) => {
   res.json({
@@ -96,6 +105,15 @@ app.delete('/api/servers/:id', (req, res) => {
 app.post('/api/servers/:id/connect', async (req, res) => {
   try {
     const state = await clientManager.connect(req.params.id);
+    res.json(state);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/servers/:id/reconnect', async (req, res) => {
+  try {
+    const state = await clientManager.reconnect(req.params.id);
     res.json(state);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

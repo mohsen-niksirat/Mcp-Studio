@@ -206,7 +206,6 @@ export class ChatSandboxService {
     });
 
     const modelName = config.model || 'gemini-2.0-flash';
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.apiKey}`;
 
     // Build contents
     const contents: any[] = [];
@@ -238,15 +237,15 @@ export class ChatSandboxService {
     assistantMsg.content = 'Thinking with Gemini...';
     onProgress({ ...assistantMsg });
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody)
+    // Key travels in the request body to our server-side proxy, never in a URL.
+    const res = await this.postToChatProxy('/api/chat/gemini', {
+      apiKey: config.apiKey,
+      model: modelName,
+      payload: reqBody
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Gemini API error (${res.status})`);
+      throw await this.extractProxyError(res, `Gemini API error (${res.status})`);
     }
 
     const data = await res.json();
@@ -294,10 +293,10 @@ export class ChatSandboxService {
           ]
         });
 
-        const secondRes = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents })
+        const secondRes = await this.postToChatProxy('/api/chat/gemini', {
+          apiKey: config.apiKey,
+          model: modelName,
+          payload: { contents }
         });
 
         if (secondRes.ok) {
@@ -332,13 +331,8 @@ export class ChatSandboxService {
     onProgress: (msg: ChatMessage) => void
   ): Promise<ChatMessage> {
     const isOllama = config.provider === 'ollama';
-    const baseUrl = config.endpoint || (isOllama ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1');
+    const baseUrl = config.endpoint || (isOllama ? 'http://localhost:11434/v1' : undefined);
     const model = config.model || (isOllama ? 'llama3.1' : 'gpt-4o-mini');
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
-    }
 
     const formattedTools = tools.map((t) => ({
       type: 'function',
@@ -361,20 +355,20 @@ export class ChatSandboxService {
     assistantMsg.content = `Connecting to ${isOllama ? 'Ollama' : 'OpenAI'} (${model})...`;
     onProgress({ ...assistantMsg });
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    // Key travels in the request body to our server-side proxy, never in a URL.
+    const res = await this.postToChatProxy('/api/chat/openai', {
+      apiKey: config.apiKey,
+      baseUrl,
+      payload: {
         model,
         messages,
         tools: formattedTools.length > 0 ? formattedTools : undefined,
         temperature: config.temperature ?? 0.7
-      })
+      }
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `API error (${res.status})`);
+      throw await this.extractProxyError(res, `API error (${res.status})`);
     }
 
     const data = await res.json();
@@ -415,10 +409,10 @@ export class ChatSandboxService {
         });
 
         // Second turn
-        const secondRes = await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ model, messages })
+        const secondRes = await this.postToChatProxy('/api/chat/openai', {
+          apiKey: config.apiKey,
+          baseUrl,
+          payload: { model, messages }
         });
 
         if (secondRes.ok) {
@@ -438,5 +432,20 @@ export class ChatSandboxService {
 
     onProgress({ ...assistantMsg });
     return assistantMsg;
+  }
+
+  // --- Helper: talk to the server-side chat proxy (keys stay in the body) ---
+  private static async postToChatProxy(path: string, body: Record<string, unknown>): Promise<Response> {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  private static async extractProxyError(res: Response, fallback: string): Promise<Error> {
+    const err = await res.json().catch(() => ({}));
+    const message = typeof err.error === 'string' ? err.error : err.error?.message;
+    return new Error(message || fallback);
   }
 }

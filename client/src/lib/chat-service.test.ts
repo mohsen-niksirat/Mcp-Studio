@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ChatSandboxService } from './chat-service';
 import { api } from './api';
 import { ChatConfig, ToolItem } from '../types';
@@ -91,11 +91,72 @@ describe('ChatSandboxService.sendUserMessage (mock provider)', () => {
 });
 
 describe('ChatSandboxService.sendUserMessage (gemini provider)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('rejects with a helpful error when the Gemini API key is missing', async () => {
     const config: ChatConfig = { provider: 'gemini', model: 'gemini-2.0-flash' };
 
     await expect(
       ChatSandboxService.sendUserMessage('hi', [], [], config, vi.fn())
     ).rejects.toThrow('Gemini API Key');
+  });
+
+  it('sends Gemini requests through the local proxy without leaking the key into any URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Hello!' }] } }] })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = {
+      provider: 'gemini',
+      apiKey: 'secret-gemini-key',
+      model: 'gemini-2.0-flash'
+    };
+
+    const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, vi.fn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('/api/chat/gemini');
+    expect(String(url)).not.toContain('secret-gemini-key');
+    const body = JSON.parse(init.body);
+    expect(body.apiKey).toBe('secret-gemini-key');
+    expect(body.model).toBe('gemini-2.0-flash');
+    expect(body.payload.contents).toEqual([{ role: 'user', parts: [{ text: 'hi' }] }]);
+    expect(msg.content).toBe('Hello!');
+  });
+});
+
+describe('ChatSandboxService.sendUserMessage (openai provider)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends OpenAI requests through the local proxy without leaking the key into any URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'Hey there' } }] })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = {
+      provider: 'openai',
+      apiKey: 'sk-secret-key',
+      model: 'gpt-4o-mini'
+    };
+
+    const msg = await ChatSandboxService.sendUserMessage('hello', [], [], config, vi.fn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('/api/chat/openai');
+    expect(String(url)).not.toContain('sk-secret-key');
+    const body = JSON.parse(init.body);
+    expect(body.apiKey).toBe('sk-secret-key');
+    expect(body.payload.model).toBe('gpt-4o-mini');
+    expect(msg.content).toBe('Hey there');
   });
 });

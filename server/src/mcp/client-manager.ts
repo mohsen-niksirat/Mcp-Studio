@@ -29,6 +29,7 @@ export class MCPClientManager extends EventEmitter {
   private rpcIdCounter = 1;
   private pendingRequests: Map<string | number, PendingRequest> = new Map();
   private stdoutBuffer = '';
+  private intentionalDisconnect = false;
 
   constructor() {
     super();
@@ -146,6 +147,8 @@ export class MCPClientManager extends EventEmitter {
       throw new Error('stdio transport requires a command (e.g. npx, node, python)');
     }
 
+    this.intentionalDisconnect = false;
+
     return new Promise((resolve, reject) => {
       try {
         const env = {
@@ -191,13 +194,38 @@ export class MCPClientManager extends EventEmitter {
 
         proc.on('exit', (code: any, signal: any) => {
           console.log(`[MCP stdio exit]: code=${code}, signal=${signal}`);
+          this.activeProcess = null;
+
+          const wasIntentional = this.intentionalDisconnect;
+          this.intentionalDisconnect = false;
+
+          const message = wasIntentional
+            ? `Process exited with code ${code}`
+            : `MCP server process exited unexpectedly (code ${code}, signal ${signal})`;
+
           this.activeState = {
             config,
-            status: 'disconnected',
-            error: code !== 0 ? `Process exited with code ${code}` : undefined
+            status: wasIntentional ? 'disconnected' : 'error',
+            error: code !== 0 || !wasIntentional ? message : undefined
           };
-          this.activeProcess = null;
           this.emit('state:changed', this.activeState);
+
+          if (!wasIntentional) {
+            this.emit('state:crashed', {
+              serverId: config.id,
+              config,
+              code,
+              signal,
+              error: message
+            });
+          }
+
+          // A dead process can never answer in-flight RPCs; fail them with the
+          // exit reason so connect() surfaces the same message as the state.
+          for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
+            this.pendingRequests.delete(id);
+            pending.reject(new Error(message));
+          }
         });
 
         // Send MCP initialize request
@@ -350,6 +378,7 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    this.intentionalDisconnect = true;
     if (this.activeProcess) {
       try {
         this.activeProcess.kill('SIGTERM');
@@ -367,6 +396,11 @@ export class MCPClientManager extends EventEmitter {
       this.emit('state:changed', this.activeState);
     }
     this.activeId = null;
+  }
+
+  async reconnect(id: string): Promise<ServerState> {
+    await this.disconnect();
+    return this.connect(id);
   }
 
   // MCP Operations
