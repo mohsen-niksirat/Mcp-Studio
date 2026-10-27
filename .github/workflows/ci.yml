@@ -53,5 +53,24 @@ jobs:
       - name: Client tests
         run: pnpm --filter mcp-studio-client test
 
+      # Coverage runs the same suites under instrumentation; only the
+      # newest leg uploads, so the matrix stays fast.
+      - name: Server coverage
+        if: matrix.node-version == 22
+        run: pnpm --filter mcp-studio-server test:coverage
+
+      - name: Client coverage
+        if: matrix.node-version == 22
+        run: pnpm --filter mcp-studio-client test:coverage
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == 22
+        uses: codecov/codecov-action@v4
+        with:
+          files: server/coverage/lcov.info,client/coverage/lcov.info
+          # Tokenless uploads work for public repos but can be rate-limited;
+          # never block CI on the upload itself.
+          fail_ci_if_error: false
+
       - name: Build client
         run: pnpm --filter mcp-studio-client build

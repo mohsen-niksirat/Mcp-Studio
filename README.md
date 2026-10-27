@@ -11,6 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-indigo.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/mohsen-niksirat/Mcp-Studio)](https://github.com/mohsen-niksirat/Mcp-Studio/releases)
 [![CI](https://github.com/mohsen-niksirat/Mcp-Studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mohsen-niksirat/Mcp-Studio/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/mohsen-niksirat/Mcp-Studio/graph/badge.svg)](https://codecov.io/gh/mohsen-niksirat/Mcp-Studio)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-emerald.svg)](https://modelcontextprotocol.io/)
