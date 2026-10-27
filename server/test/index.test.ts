@@ -79,6 +79,7 @@ async function runTests() {
 }
 
 runTests().catch((err) => {
-  console.error('❌ Test failed:', err);
+  // GitHub Actions turns "::error::" lines into public annotations.
+  console.error(`${process.env.CI ? '::error::' : ''}Test failed:`, err?.stack || err);
   process.exit(1);
 });

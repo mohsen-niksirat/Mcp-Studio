@@ -190,6 +190,12 @@ export class MCPClientManager extends EventEmitter {
           });
         });
 
+        // Writing to a child that just died raises EPIPE; the exit handler
+        // owns the state transition, so just keep the process alive.
+        proc.stdin?.on?.('error', (err: any) => {
+          console.warn(`[MCP stdio stdin error]: ${err?.message || err}`);
+        });
+
         proc.stdout?.on('data', (chunk: any) => {
           this.handleStdoutChunk(chunk.toString());
         });

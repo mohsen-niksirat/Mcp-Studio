@@ -15,7 +15,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22]
+        include:
+          # pnpm 11 requires Node >= 22.13 (node:sqlite), so Node 20
+          # installs with pnpm 10 (compatible with the v9 lockfile).
+          - node-version: 20
+            pnpm-version: 10
+          - node-version: 22
+            pnpm-version: 11.13.1
 
     steps:
       - name: Checkout repository
@@ -24,7 +30,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.13.1
+          version: ${{ matrix.pnpm-version }}
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4

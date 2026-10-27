@@ -1,4 +1,7 @@
 import assert from 'assert';
+import { unlinkSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
 import { MCPClientManager } from '../src/mcp/client-manager.js';
 
 async function waitFor(condition: () => boolean, timeoutMs: number, what: string): Promise<void> {
@@ -18,12 +21,16 @@ async function runTests() {
   const crashed: any[] = [];
   manager.on('state:crashed', (payload) => crashed.push(payload));
 
-  // stdio server that dies unexpectedly right after spawn
+  // stdio server that dies unexpectedly right after spawn. A file (instead of
+  // `node -e`) avoids shell metacharacter pitfalls across platforms.
+  const crashScript = path.join(os.tmpdir(), `mcp-studio-crash-${Date.now()}-${process.pid}.js`);
+  writeFileSync(crashScript, 'process.exit(2);\n');
+
   const crashy = manager.addServer({
     name: 'Crashy Server',
     transport: 'stdio',
     command: 'node',
-    args: ['-e', 'process.exit(2)'],
+    args: [crashScript],
     source: 'manual'
   });
 
@@ -62,10 +69,16 @@ async function runTests() {
   console.log('✅ reconnect() restores a working connection after a crash');
 
   await manager.disconnect();
+  try {
+    unlinkSync(crashScript);
+  } catch {
+    // best effort cleanup
+  }
   console.log('\n🎉 ALL CRASH RESILIENCE TESTS PASSED!\n');
 }
 
 runTests().catch((err) => {
-  console.error('❌ Test failed:', err);
+  // GitHub Actions turns "::error::" lines into public annotations.
+  console.error(`${process.env.CI ? '::error::' : ''}Test failed:`, err?.stack || err);
   process.exit(1);
 });
