@@ -16,7 +16,7 @@
     "build": "pnpm --filter mcp-studio-client build && pnpm --filter mcp-studio-server build",
     "build:desktop": "cd desktop && go build -ldflags \"-H windowsgui -s -w\" -o ../dist/MCP-Studio.exe",
     "start": "node server/dist/index.js",
-    "test": "pnpm --filter mcp-studio-server test"
+    "test": "pnpm --filter mcp-studio-server test && pnpm --filter mcp-studio-client test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
