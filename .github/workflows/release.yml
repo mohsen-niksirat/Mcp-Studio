@@ -36,6 +36,15 @@ jobs:
           pnpm install --no-frozen-lockfile
           pnpm approve-builds --all
 
+      - name: Typecheck workspaces
+        run: pnpm -r typecheck
+
+      - name: Backend tests
+        run: pnpm --filter mcp-studio-server test
+
+      - name: Client tests
+        run: pnpm --filter mcp-studio-client test
+
       - name: Build Full Stack (Client & Server)
         run: pnpm build
 
