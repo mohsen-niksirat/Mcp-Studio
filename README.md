@@ -9,6 +9,7 @@
 [![Windows Desktop](https://img.shields.io/badge/Windows-Download_.exe-blue?style=for-the-badge&logo=windows)](https://github.com/mohsen-niksirat/Mcp-Studio/releases)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-indigo.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/mohsen-niksirat/Mcp-Studio/actions/workflows/ci.yml/badge.svg)](https://github.com/mohsen-niksirat/Mcp-Studio/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-emerald.svg)](https://modelcontextprotocol.io/)
