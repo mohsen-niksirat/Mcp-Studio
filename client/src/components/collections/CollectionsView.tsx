@@ -369,8 +369,11 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
                 <div className="font-semibold text-slate-200">Configure New Test Step</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-400 mb-1">Target MCP Tool</label>
+                    <label htmlFor="step-tool" className="block text-slate-400 mb-1">
+                      Target MCP Tool
+                    </label>
                     <select
+                      id="step-tool"
                       value={newStepTool}
                       onChange={(e) => setNewStepTool(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -384,10 +387,11 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
                   </div>
 
                   <div>
-                    <label className="block text-slate-400 mb-1">
+                    <label htmlFor="step-assert" className="block text-slate-400 mb-1">
                       Expected Substring Assertion (Optional)
                     </label>
                     <input
+                      id="step-assert"
                       type="text"
                       placeholder='e.g. "result" or "true"'
                       value={newStepAssert}
@@ -398,8 +402,11 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Arguments JSON</label>
+                  <label htmlFor="step-args" className="block text-slate-400 mb-1">
+                    Arguments JSON
+                  </label>
                   <textarea
+                    id="step-args"
                     rows={2}
                     value={newStepArgs}
                     onChange={(e) => setNewStepArgs(e.target.value)}

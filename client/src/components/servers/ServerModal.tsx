@@ -141,13 +141,20 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="server-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+    >
       <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Sparkles className="h-5 w-5 text-indigo-400" />
-            <h2 className="text-base font-semibold text-slate-100">MCP Server Management</h2>
+            <h2 id="server-modal-title" className="text-base font-semibold text-slate-100">
+              MCP Server Management
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -193,10 +200,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           {tab === 'create' ? (
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="server-name" className="block text-xs font-medium text-slate-300 mb-1">
                   Server Name
                 </label>
                 <input
+                  id="server-name"
                   type="text"
                   placeholder="e.g. Local Filesystem MCP"
                   value={name}
@@ -248,10 +256,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
               {transport === 'stdio' ? (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-command" className="block text-xs font-medium text-slate-300 mb-1">
                       Command
                     </label>
                     <input
+                      id="server-command"
                       type="text"
                       placeholder="npx or python or node"
                       value={command}
@@ -260,10 +269,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-args" className="block text-xs font-medium text-slate-300 mb-1">
                       Arguments (space separated)
                     </label>
                     <input
+                      id="server-args"
                       type="text"
                       placeholder="-y @modelcontextprotocol/server-filesystem C:\Path"
                       value={argsStr}
@@ -272,10 +282,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-env" className="block text-xs font-medium text-slate-300 mb-1">
                       Environment Variables (KEY=VALUE or JSON)
                     </label>
                     <textarea
+                      id="server-env"
                       rows={2}
                       placeholder="API_KEY=xyz123&#10;DEBUG=true"
                       value={envStr}

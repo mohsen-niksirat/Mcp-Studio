@@ -121,9 +121,16 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
             return (
               <div key={key} className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-300 flex items-center space-x-1">
+                  <label
+                    htmlFor={`schema-field-${key}`}
+                    className="text-xs font-medium text-slate-300 flex items-center space-x-1"
+                  >
                     <span className="font-mono text-indigo-300">{key}</span>
-                    {isRequired && <span className="text-rose-400 font-bold">*</span>}
+                    {isRequired && (
+                      <span aria-hidden="true" className="text-rose-400 font-bold">
+                        *
+                      </span>
+                    )}
                   </label>
                   <span className="text-[10px] font-mono text-slate-500">
                     {prop.type || (prop.enum ? 'enum' : 'any')}
@@ -137,6 +144,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 {/* Enums */}
                 {prop.enum ? (
                   <select
+                    id={`schema-field-${key}`}
                     value={val}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -152,6 +160,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                   <label className="flex items-center space-x-2 cursor-pointer pt-1">
                     <input
                       type="checkbox"
+                      aria-label={key}
                       checked={Boolean(val)}
                       onChange={(e) => handleFieldChange(key, e.target.checked)}
                       className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0"
@@ -163,6 +172,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : prop.type === 'number' || prop.type === 'integer' ? (
                   <input
                     type="number"
+                    id={`schema-field-${key}`}
                     value={val}
                     onChange={(e) =>
                       handleFieldChange(
@@ -176,6 +186,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : prop.type === 'object' || prop.type === 'array' ? (
                   <textarea
                     rows={3}
+                    id={`schema-field-${key}`}
                     value={typeof val === 'object' ? JSON.stringify(val, null, 2) : val}
                     onChange={(e) => {
                       try {
@@ -190,6 +201,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : (
                   <input
                     type="text"
+                    id={`schema-field-${key}`}
                     value={val}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     placeholder={`Enter ${key}...`}
