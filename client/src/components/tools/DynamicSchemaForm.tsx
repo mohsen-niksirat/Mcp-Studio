@@ -117,12 +117,13 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
             const prop = properties[key];
             const isRequired = requiredList.includes(key);
             const val = values[key] !== undefined ? values[key] : '';
+            const fieldId = `schema-field-${key}`;
 
             return (
               <div key={key} className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label
-                    htmlFor={`schema-field-${key}`}
+                    htmlFor={fieldId}
                     className="text-xs font-medium text-slate-300 flex items-center space-x-1"
                   >
                     <span className="font-mono text-indigo-300">{key}</span>
@@ -144,7 +145,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 {/* Enums */}
                 {prop.enum ? (
                   <select
-                    id={`schema-field-${key}`}
+                    id={fieldId}
                     value={val}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -172,7 +173,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : prop.type === 'number' || prop.type === 'integer' ? (
                   <input
                     type="number"
-                    id={`schema-field-${key}`}
+                    id={fieldId}
                     value={val}
                     onChange={(e) =>
                       handleFieldChange(
@@ -186,7 +187,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : prop.type === 'object' || prop.type === 'array' ? (
                   <textarea
                     rows={3}
-                    id={`schema-field-${key}`}
+                    id={fieldId}
                     value={typeof val === 'object' ? JSON.stringify(val, null, 2) : val}
                     onChange={(e) => {
                       try {
@@ -201,7 +202,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                 ) : (
                   <input
                     type="text"
-                    id={`schema-field-${key}`}
+                    id={fieldId}
                     value={val}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     placeholder={`Enter ${key}...`}

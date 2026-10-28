@@ -24,19 +24,25 @@ export const api = {
   },
 
   async getServers(): Promise<{ servers: ServerConfig[]; activeState: ServerState | null }> {
-    try {
-      const res = await fetch(`${API_BASE}/servers`, { signal: AbortSignal.timeout(2000) });
-      if (!res.ok) throw new Error('Backend not available');
-      isStandaloneWeb = false;
-      return res.json();
-    } catch {
-      // Switch to In-Browser Web Mode
-      isStandaloneWeb = true;
-      return {
-        servers: browserAdapter.getServers(),
-        activeState: browserAdapter.getActiveState()
-      };
+    // Two probes: a single 2s timeout can race a cold backend start and
+    // permanently strand the session in standalone mode even though the
+    // backend is up. Without a backend (GitHub Pages demo) the probe fails
+    // fast, so the extra attempt costs nothing there.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(`${API_BASE}/servers`, { signal: AbortSignal.timeout(2000) });
+        if (!res.ok) throw new Error('Backend not available');
+        isStandaloneWeb = false;
+        return res.json();
+      } catch {
+        // Retry once before switching to In-Browser Web Mode.
+      }
     }
+    isStandaloneWeb = true;
+    return {
+      servers: browserAdapter.getServers(),
+      activeState: browserAdapter.getActiveState()
+    };
   },
 
   async addServer(config: Partial<ServerConfig>): Promise<ServerConfig> {

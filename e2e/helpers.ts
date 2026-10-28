@@ -10,7 +10,9 @@ export async function openApp(page: Page): Promise<void> {
   try {
     await page.goto('/');
   } catch (error) {
-    if (!/CONNECTION_REFUSED|ERR_CONNECTION_REFUSED/.test(String(error))) throw error;
+    // Matches both firefox's NS_ERROR_CONNECTION_REFUSED and chromium's
+    // ERR_CONNECTION_REFUSED.
+    if (!/CONNECTION_REFUSED/.test(String(error))) throw error;
     await page.waitForTimeout(1_000);
     await page.goto('/');
   }
