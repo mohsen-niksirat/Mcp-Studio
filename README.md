@@ -17,7 +17,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-emerald.svg)](https://modelcontextprotocol.io/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
 
-[**Live Web Demo**](https://mohsen-niksirat.github.io/Mcp-Studio/) • [**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**Roadmap**](#-roadmap)
+[**Live Web Demo**](https://mohsen-niksirat.github.io/Mcp-Studio/) • [**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**API**](#-rest-api-reference) • [**Testing**](#-testing) • [**Roadmap**](#-roadmap)
 
 <br/>
 
@@ -136,6 +136,123 @@ Connects to remote endpoints over HTTP streaming:
 
 ---
 
+## 🔐 Secure AI Chat Proxy
+
+The AI Chat Sandbox never calls LLM providers from the browser. Every request
+goes through the local backend (`server/src/chat/chat-proxy.ts`), which attaches
+the provider key server-side and streams the answer straight back:
+
+```mermaid
+flowchart LR
+    B["🖥️ Browser<br/>AI Chat Sandbox"]
+    P["🛡️ Express proxy<br/>POST /api/chat/gemini<br/>POST /api/chat/openai"]
+    G["Gemini API<br/>generativelanguage.googleapis.com"]
+    O["OpenAI-compatible API<br/>api.openai.com or custom baseUrl"]
+
+    B -->|"provider key in the<br/>request body (never a URL)"| P
+    P -->|"x-goog-api-key header"| G
+    P -->|"Authorization: Bearer<br/>(key optional)"| O
+    G -->|"streamed passthrough"| B
+    O -->|"streamed passthrough"| B
+```
+
+Hardening details:
+
+- **Keys never appear in URLs** — the Gemini key is sent in the
+  `x-goog-api-key` header instead of the `?key=` query parameter, so it cannot
+  leak into proxies, logs, or browser history.
+- **Model identifiers are validated** (`/^[A-Za-z0-9._-]+$/`) before being
+  interpolated into the upstream URL, blocking path injection.
+- **OpenAI-compatible endpoints are supported** — pass a custom `baseUrl`
+  (must be `http(s)`) to target local gateways such as Ollama
+  (`http://localhost:11434/v1`), which need no API key.
+- **Responses stream through unbuffered**; upstream failures surface as
+  `502` with a JSON error instead of hanging the connection.
+
+---
+
+## 🔌 REST API Reference
+
+The backend listens on **`http://localhost:4999`** (in dev the Vite server
+proxies `/api` and `/ws` on `:5173`). All errors return non-2xx status with a
+JSON `{ "error": string }` body.
+
+### Server registry
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/servers` | List registered servers + current `activeState` |
+| `POST` | `/api/servers` | Register a server (`name`, `transport`, plus `command`/`args`/`env` for stdio or `url`/`headers` for SSE) |
+| `DELETE` | `/api/servers/:id` | Remove a registered server |
+| `POST` | `/api/servers/:id/connect` | Connect and make it the active server |
+| `POST` | `/api/servers/:id/reconnect` | Clean-session reconnect: disconnect the current active server, then connect `:id` fresh (crash recovery after `state:crashed`) |
+| `POST` | `/api/servers/disconnect` | Disconnect the active server |
+| `GET` | `/api/servers/active/state` | Current active-server state (status, server info, counts) |
+
+### Active-server operations
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/servers/active/tools` | `tools/list` from the active server |
+| `POST` | `/api/servers/active/tools/call` | `tools/call` — body `{ name, arguments }` |
+| `GET` | `/api/servers/active/resources` | `resources/list` |
+| `POST` | `/api/servers/active/resources/read` | `resources/read` — body `{ uri }` |
+| `GET` | `/api/servers/active/prompts` | `prompts/list` |
+| `POST` | `/api/servers/active/prompts/get` | `prompts/get` — body `{ name, arguments }` |
+| `POST` | `/api/servers/active/benchmark` | Multi-round handshake/latency benchmark — body `{ iterations }` (default 5) |
+
+### System & import
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/logs?limit=100` | Recent protocol/transport log lines |
+| `DELETE` | `/api/logs` | Clear the log buffer |
+| `GET` | `/api/import/detect` | Detect Claude Desktop / Cursor MCP configs on this machine |
+| `POST` | `/api/import/apply` | Import detected servers — body `{ servers: [...] }` |
+| `POST` | `/api/chat/gemini` | Secure Gemini proxy — body `{ apiKey, model?, payload }` |
+| `POST` | `/api/chat/openai` | Secure OpenAI-compatible proxy — body `{ apiKey?, baseUrl?, payload }` |
+
+### WebSocket (`/ws`)
+
+The backend broadcasts real-time events to every connected client:
+
+| Event | Fired when |
+| --- | --- |
+| `state:changed` | The active-server state changes (connect, disconnect, recovery) |
+| `state:crashed` | The active stdio process dies unexpectedly |
+| `log` | A protocol/transport log line is recorded |
+| `notification` | A user-visible toast event occurs |
+| `logs:cleared` | The log buffer is cleared |
+
+---
+
+## 🧪 Testing
+
+The monorepo ships three test layers, all wired into CI:
+
+| Layer | Command | Stack |
+| --- | --- | --- |
+| Backend unit | `pnpm --filter mcp-studio-server test` | `tsx` + `assert` — chat proxy, client manager (incl. crash resilience), mock server |
+| Client unit | `pnpm --filter mcp-studio-client test` | Vitest + Testing Library |
+| End-to-end | `pnpm --filter mcp-studio-e2e test` | Playwright — real backend + real browser |
+
+Coverage runs the same suites under instrumentation and uploads lcov reports
+to Codecov from CI (Node 22 leg):
+
+```bash
+pnpm --filter mcp-studio-server test:coverage   # c8
+pnpm --filter mcp-studio-client test:coverage   # Vitest V8 coverage
+```
+
+The E2E suite starts both servers itself and covers three user journeys:
+server management (incl. the Add Server modal), the tools runner (schema form →
+`tools/call` → protocol inspector), and test collections (create, add a math
+step with an assertion, run green). CI executes it on **chromium**; locally all
+three browsers run — see [`e2e/README.md`](e2e/README.md) for browser notes and
+the design constraints behind the serial execution.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] Multi-server switcher & connection status indicator
@@ -150,6 +267,10 @@ Connects to remote endpoints over HTTP streaming:
 - [x] Test Collections & Scenario Runner with assertions & JSON export
 - [x] Raycast-style Command Palette (Ctrl+K)
 - [x] Standalone Windows desktop package (.exe)
+- [x] Secure server-side AI chat proxy (provider keys never in URLs)
+- [x] Crash-resilient connections with a dedicated reconnect endpoint
+- [x] Coverage reporting (c8 + Vitest) with Codecov badge
+- [x] Playwright end-to-end suite in CI
 - [ ] Direct LLM sampling sandbox (streaming server-initiated sampling)
 
 ---
