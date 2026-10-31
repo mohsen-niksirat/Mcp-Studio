@@ -1,21 +1,58 @@
 import React, { useState } from 'react';
 import {
-  Zap,
-  Activity,
-  CheckCircle2,
   AlertCircle,
-  Clock,
+  CheckCircle2,
   Gauge,
+  Server,
   ShieldCheck,
-  RefreshCw,
-  Server
+  Timer,
+  TrendingUp,
+  Zap
 } from 'lucide-react';
 import { BenchmarkStats, ServerState } from '../../types';
 import { api } from '../../lib/api';
+import { Badge, Button, Card, CardBody, EmptyState, Spinner } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface BenchmarkViewProps {
   activeState: ServerState | null;
 }
+
+interface MetricCardProps {
+  label: string;
+  value: string | number;
+  unit?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: 'brand' | 'success' | 'warning' | 'neutral';
+}
+
+const metricTones = {
+  brand: 'text-brand-300',
+  success: 'text-emerald-400',
+  warning: 'text-amber-400',
+  neutral: 'text-slate-200'
+};
+
+const MetricCard: React.FC<MetricCardProps> = ({
+  label,
+  value,
+  unit,
+  icon: Icon,
+  tone = 'neutral'
+}) => (
+  <Card>
+    <CardBody className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="section-label">{label}</span>
+        <Icon className="h-3.5 w-3.5 text-slate-600" />
+      </div>
+      <div className={cn('text-2xl font-bold font-mono', metricTones[tone])}>
+        {value}
+        {unit && <span className="text-xs text-slate-500 font-normal ml-1">{unit}</span>}
+      </div>
+    </CardBody>
+  </Card>
+);
 
 export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => {
   const [iterations, setIterations] = useState(10);
@@ -39,222 +76,245 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => 
   const isConnected = activeState?.status === 'connected';
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto bg-[#0b0f19] space-y-6">
-      {/* Top Banner */}
-      <div className="flex items-center justify-between pb-6 border-b border-slate-800">
+    <div className="flex-1 p-6 overflow-y-auto bg-surface-950 space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-surface-800">
         <div>
-          <div className="flex items-center space-x-2">
-            <Zap className="h-5 w-5 text-indigo-400" />
-            <h2 className="text-base font-bold text-slate-100">
-              Protocol Conformance & Latency Benchmark
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-brand-400" />
+            <h2 className="text-base font-semibold text-slate-100">
+              Benchmark & Health
             </h2>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Measure roundtrip JSON-RPC throughput, roundtrip latency jitter, and protocol compliance.
+          <p className="text-xs text-slate-500 mt-1 max-w-xl">
+            Measure JSON-RPC roundtrip latency, jitter, and protocol compliance
+            of the active server.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
-            <span>Rounds:</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-surface-900 border border-surface-800 rounded-lg px-3 py-1.5 text-xs text-slate-300">
+            <span>Rounds</span>
             <select
               value={iterations}
               onChange={(e) => setIterations(Number(e.target.value))}
               disabled={isRunning || !isConnected}
-              className="bg-transparent text-indigo-300 font-mono focus:outline-none cursor-pointer"
+              aria-label="Benchmark rounds"
+              className="bg-transparent text-brand-300 font-mono focus:outline-none cursor-pointer"
             >
-              <option value={5} className="bg-slate-900">5</option>
-              <option value={10} className="bg-slate-900">10</option>
-              <option value={25} className="bg-slate-900">25</option>
-              <option value={50} className="bg-slate-900">50</option>
+              <option value={5} className="bg-surface-900">5</option>
+              <option value={10} className="bg-surface-900">10</option>
+              <option value={25} className="bg-surface-900">25</option>
+              <option value={50} className="bg-surface-900">50</option>
             </select>
           </div>
 
-          <button
+          <Button
+            variant="primary"
             onClick={handleRun}
             disabled={isRunning || !isConnected}
-            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRunning ? 'animate-spin' : ''}`} />
-            <span>{isRunning ? 'Benchmarking...' : 'Start Benchmark'}</span>
-          </button>
+            {isRunning ? (
+              <>
+                <Spinner className="h-3.5 w-3.5 border" />
+                <span>Running...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="h-3.5 w-3.5" />
+                <span>Start Benchmark</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
       {!isConnected ? (
-        <div className="p-8 text-center text-xs text-slate-500 bg-slate-900/40 border border-slate-800 rounded-2xl">
-          Connect to an active MCP server in the top bar to run conformance tests and latency benchmarks.
-        </div>
+        <Card>
+          <EmptyState
+            icon={Server}
+            title="No active server"
+            description="Connect to an MCP server in the top bar to run conformance tests and latency benchmarks."
+          />
+        </Card>
       ) : (
         <>
-          {/* Server Info Cards */}
+          {/* Server summary */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl space-y-1">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                Target Server
-              </span>
-              <div className="text-sm font-bold text-slate-200 truncate">
-                {activeState?.config.name}
-              </div>
-              <div className="text-xs font-mono text-indigo-400 uppercase">
-                {activeState?.config.transport} transport
-              </div>
-            </div>
+            <Card>
+              <CardBody className="space-y-1">
+                <span className="section-label">Target Server</span>
+                <div className="text-sm font-semibold text-slate-200 truncate">
+                  {activeState?.config.name}
+                </div>
+                <Badge tone="brand" className="font-mono text-[10px] uppercase w-fit">
+                  {activeState?.config.transport}
+                </Badge>
+              </CardBody>
+            </Card>
 
-            <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl space-y-1">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                MCP Protocol Version
-              </span>
-              <div className="text-sm font-bold text-slate-200 font-mono">
-                {activeState?.serverInfo?.protocolVersion || '2024-11-05'}
-              </div>
-              <div className="text-xs text-emerald-400 flex items-center space-x-1">
-                <CheckCircle2 className="h-3 w-3" />
-                <span>Compatible Handshake</span>
-              </div>
-            </div>
+            <Card>
+              <CardBody className="space-y-1">
+                <span className="section-label">Protocol Version</span>
+                <div className="text-sm font-semibold text-slate-200 font-mono">
+                  {activeState?.serverInfo?.protocolVersion || '2024-11-05'}
+                </div>
+                <div className="text-[11px] text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>Handshake complete</span>
+                </div>
+              </CardBody>
+            </Card>
 
-            <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl space-y-1">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                Connection Status
-              </span>
-              <div className="text-sm font-bold text-emerald-400 capitalize">
-                {activeState?.status}
-              </div>
-              <div className="text-xs font-mono text-slate-500">
-                Connected at {activeState?.connectedAt ? new Date(activeState.connectedAt).toLocaleTimeString() : 'N/A'}
-              </div>
-            </div>
+            <Card>
+              <CardBody className="space-y-1">
+                <span className="section-label">Connection</span>
+                <div className="text-sm font-semibold text-emerald-400 capitalize">
+                  {activeState?.status}
+                </div>
+                <div className="text-[11px] font-mono text-slate-500">
+                  Since{' '}
+                  {activeState?.connectedAt
+                    ? new Date(activeState.connectedAt).toLocaleTimeString()
+                    : 'N/A'}
+                </div>
+              </CardBody>
+            </Card>
           </div>
 
           {error && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs font-mono text-rose-300">
-              {error}
-            </div>
+            <Card className="border-rose-500/25 bg-rose-950/10">
+              <CardBody>
+                <pre className="text-xs font-mono text-rose-300 whitespace-pre-wrap">
+                  {error}
+                </pre>
+              </CardBody>
+            </Card>
           )}
 
-          {/* Benchmark Results */}
           {stats && (
-            <div className="space-y-6">
-              {/* Summary Metric Cards */}
+            <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 bg-indigo-950/20 border border-indigo-500/30 rounded-2xl space-y-1">
-                  <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider">
-                    Avg Latency
-                  </span>
-                  <div className="text-2xl font-black text-indigo-200 font-mono">
-                    {stats.avgLatencyMs}
-                    <span className="text-xs text-indigo-400 font-normal ml-1">ms</span>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-slate-900/70 border border-slate-800 rounded-2xl space-y-1">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Min Latency
-                  </span>
-                  <div className="text-2xl font-black text-emerald-400 font-mono">
-                    {stats.minLatencyMs}
-                    <span className="text-xs text-slate-400 font-normal ml-1">ms</span>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-slate-900/70 border border-slate-800 rounded-2xl space-y-1">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Max Latency
-                  </span>
-                  <div className="text-2xl font-black text-amber-400 font-mono">
-                    {stats.maxLatencyMs}
-                    <span className="text-xs text-slate-400 font-normal ml-1">ms</span>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl space-y-1">
-                  <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                    Success Rate
-                  </span>
-                  <div className="text-2xl font-black text-emerald-300 font-mono">
-                    {stats.successRate}
-                    <span className="text-xs text-emerald-400 font-normal ml-1">%</span>
-                  </div>
-                </div>
+                <MetricCard
+                  label="Avg Latency"
+                  value={stats.avgLatencyMs}
+                  unit="ms"
+                  icon={Gauge}
+                  tone="brand"
+                />
+                <MetricCard
+                  label="Min Latency"
+                  value={stats.minLatencyMs}
+                  unit="ms"
+                  icon={Timer}
+                  tone="success"
+                />
+                <MetricCard
+                  label="Max Latency"
+                  value={stats.maxLatencyMs}
+                  unit="ms"
+                  icon={TrendingUp}
+                  tone="warning"
+                />
+                <MetricCard
+                  label="Success Rate"
+                  value={stats.successRate}
+                  unit="%"
+                  icon={CheckCircle2}
+                  tone="success"
+                />
               </div>
 
-              {/* Iteration Breakdown List */}
-              <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 space-y-3">
-                <div className="text-xs font-semibold text-slate-300">
-                  Roundtrip Latency Breakdown ({stats.iterations} samples)
-                </div>
-
-                <div className="space-y-1.5">
-                  {stats.results.map((r, i) => {
-                    const maxLatency = Math.max(...stats.results.map((x) => x.latencyMs), 1);
-                    const pct = Math.max(Math.round((r.latencyMs / maxLatency) * 100), 4);
-                    return (
-                      <div key={i} className="flex items-center space-x-3 text-xs font-mono">
-                        <span className="text-slate-500 w-8">#{i + 1}</span>
-                        <div className="flex-1 bg-slate-800/80 rounded-full h-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              r.success ? 'bg-indigo-500' : 'bg-rose-500'
-                            }`}
-                            style={{ width: `${pct}%` }}
-                          />
+              {/* Latency breakdown */}
+              <Card>
+                <CardBody className="space-y-3">
+                  <div className="text-xs font-semibold text-slate-300">
+                    Roundtrip Breakdown ({stats.iterations} samples)
+                  </div>
+                  <div className="space-y-1.5">
+                    {stats.results.map((r, i) => {
+                      const maxLatency = Math.max(
+                        ...stats.results.map((x) => x.latencyMs),
+                        1
+                      );
+                      const pct = Math.max(
+                        Math.round((r.latencyMs / maxLatency) * 100),
+                        4
+                      );
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 text-xs font-mono"
+                        >
+                          <span className="text-slate-500 w-8">#{i + 1}</span>
+                          <div className="flex-1 bg-surface-800/80 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500',
+                                r.success ? 'bg-brand-500' : 'bg-rose-500'
+                              )}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-slate-300 w-12 text-right">
+                            {r.latencyMs}ms
+                          </span>
+                          {r.success ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                          )}
                         </div>
-                        <span className="text-slate-300 w-12 text-right">{r.latencyMs}ms</span>
-                        {r.success ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                        ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      );
+                    })}
+                  </div>
+                </CardBody>
+              </Card>
             </div>
           )}
 
-          {/* Conformance Checklist */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <span>MCP Protocol Conformance Checklist</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-              <div className="flex items-start space-x-2 text-xs p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-200">JSON-RPC 2.0 Compliance</div>
-                  <div className="text-[11px] text-slate-400">Strict version field, unique integer/string request IDs.</div>
-                </div>
+          {/* Conformance */}
+          <Card>
+            <CardBody className="space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <span>MCP Protocol Conformance</span>
               </div>
-
-              <div className="flex items-start space-x-2 text-xs p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-200">Initialize Handshake</div>
-                  <div className="text-[11px] text-slate-400">Negotiated protocol version and server capabilities.</div>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  {
+                    title: 'JSON-RPC 2.0 Compliance',
+                    desc: 'Strict version field, unique request IDs.'
+                  },
+                  {
+                    title: 'Initialize Handshake',
+                    desc: 'Negotiated protocol version and capabilities.'
+                  },
+                  {
+                    title: 'Tools Schema Draft-07',
+                    desc: 'Input schemas conform to valid JSON Schema.'
+                  },
+                  {
+                    title: 'Bi-directional Notifications',
+                    desc: 'Async progress and list-change signals.'
+                  }
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="flex items-start gap-2 text-xs p-3 bg-surface-900/60 border border-surface-800/60 rounded-lg"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-slate-200">{item.title}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        {item.desc}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              <div className="flex items-start space-x-2 text-xs p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-200">Tools Schema Draft-07</div>
-                  <div className="text-[11px] text-slate-400">Tool input schemas conform to valid JSON schema specifications.</div>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-2 text-xs p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-200">Bi-directional Notifications</div>
-                  <div className="text-[11px] text-slate-400">Supports asynchronous progress and list change signals.</div>
-                </div>
-              </div>
-            </div>
-          </div>
+            </CardBody>
+          </Card>
         </>
       )}
     </div>

@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
 import {
-  Wrench,
-  Search,
-  Play,
-  Clock,
-  CheckCircle2,
   AlertCircle,
+  CheckCircle2,
+  Clock,
+  Code2,
   Copy,
   Check,
-  Code2,
-  FileText,
-  RotateCcw
+  Play,
+  RotateCcw,
+  Search,
+  Wrench
 } from 'lucide-react';
 import { ToolItem } from '../../types';
 import { DynamicSchemaForm } from './DynamicSchemaForm';
 import { CodeSnippetModal } from './CodeSnippetModal';
 import { api } from '../../lib/api';
+import { Badge, Button, Card, CardBody, EmptyState, Spinner } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface ToolsViewProps {
   tools: ToolItem[];
@@ -45,16 +46,23 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
   const [history, setHistory] = useState<ExecutionHistoryItem[]>([]);
   const [isSnippetOpen, setIsSnippetOpen] = useState(false);
 
-  // Update selected tool if tools change
+  // Keep selected tool in sync with the live catalog: drop the selection if
+  // the tool disappears (server switch / disconnect) and pick the first tool
+  // when nothing valid is selected.
   React.useEffect(() => {
-    if (!selectedTool && tools.length > 0) {
+    if (tools.length === 0) {
+      setSelectedTool(null);
+      return;
+    }
+    if (!selectedTool || !tools.some((t) => t.name === selectedTool.name)) {
       setSelectedTool(tools[0]);
     }
   }, [tools, selectedTool]);
 
-  const filteredTools = tools.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.description?.toLowerCase().includes(search.toLowerCase())
+  const filteredTools = tools.filter(
+    (t) =>
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.description?.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSelectTool = (t: ToolItem) => {
@@ -73,7 +81,8 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
 
     try {
       const res = await api.callTool(selectedTool.name, formValues);
-      const latency = res.latencyMs !== undefined ? res.latencyMs : Date.now() - start;
+      const latency =
+        res.latencyMs !== undefined ? res.latencyMs : Date.now() - start;
       setLastResult(res);
       setLastLatency(latency);
 
@@ -87,9 +96,8 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
       };
       setHistory((prev) => [historyItem, ...prev.slice(0, 19)]);
     } catch (err: any) {
-      const latency = Date.now() - start;
       setLastError(err.message || 'Execution failed');
-      setLastLatency(latency);
+      setLastLatency(Date.now() - start);
     } finally {
       setIsExecuting(false);
     }
@@ -103,31 +111,30 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-slate-500 font-mono text-xs">
-        Loading tools from active MCP server...
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Spinner />
+          <span className="text-xs font-mono">Loading tools...</span>
+        </div>
       </div>
     );
   }
 
   if (tools.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
-        <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500">
-          <Wrench className="h-8 w-8 text-indigo-400 mx-auto" />
-        </div>
-        <h3 className="text-sm font-semibold text-slate-300">No tools discovered</h3>
-        <p className="text-xs text-slate-500 max-w-sm">
-          Connect to an active server or select the built-in MCP-Studio Demo Server in the top header.
-        </p>
-      </div>
+      <EmptyState
+        icon={Wrench}
+        title="No tools discovered"
+        description="Connect to an active server or pick the built-in demo server from the header to start executing tools."
+      />
     );
   }
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left Column: Tool List */}
-      <div className="w-80 border-r border-slate-800 bg-[#0c1222] flex flex-col shrink-0">
-        <div className="p-3 border-b border-slate-800">
+      {/* Tool list */}
+      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+        <div className="p-3 border-b border-surface-800">
           <div className="relative">
             <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -135,7 +142,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
               placeholder="Search tools..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
             />
           </div>
         </div>
@@ -147,15 +154,23 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
               <button
                 key={t.name}
                 onClick={() => handleSelectTool(t)}
-                className={`w-full text-left p-2.5 rounded-xl transition-all ${
+                className={cn(
+                  'w-full text-left p-2.5 rounded-lg transition-colors',
                   isSelected
-                    ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-200'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                }`}
+                    ? 'bg-brand-600/15 text-brand-200'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+                )}
               >
-                <div className="flex items-center space-x-2">
-                  <Wrench className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-500'}`} />
-                  <span className="font-mono text-xs font-semibold truncate">{t.name}</span>
+                <div className="flex items-center gap-2">
+                  <Wrench
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0',
+                      isSelected ? 'text-brand-400' : 'text-slate-500'
+                    )}
+                  />
+                  <span className="font-mono text-xs font-semibold truncate">
+                    {t.name}
+                  </span>
                 </div>
                 {t.description && (
                   <p className="text-[11px] text-slate-500 truncate mt-1 pl-5">
@@ -168,33 +183,32 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
         </div>
       </div>
 
-      {/* Center & Right: Runner and Results */}
       {selectedTool && (
         <div className="flex-1 flex overflow-hidden">
-          {/* Middle: Schema Form */}
-          <div className="w-96 border-r border-slate-800 p-6 overflow-y-auto bg-[#0a0f1d] shrink-0">
-            <div className="mb-4">
+          {/* Schema form */}
+          <div className="w-96 border-r border-surface-800 p-5 overflow-y-auto bg-surface-950 shrink-0">
+            <div className="mb-5 space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono text-sm font-bold text-slate-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-sm font-bold text-slate-100 truncate">
                     {selectedTool.name}
                   </span>
-                  <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                  <Badge tone="brand" className="font-mono text-[10px]">
                     tool
-                  </span>
+                  </Badge>
                 </div>
-
-                <button
+                <Button
+                  size="sm"
+                  variant="secondary"
                   onClick={() => setIsSnippetOpen(true)}
-                  className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-600/30 border border-indigo-500/20 rounded-lg transition-all"
-                  title="Generate Python/TypeScript code for this tool"
+                  title="Generate integration code"
                 >
-                  <Code2 className="h-3 w-3" />
+                  <Code2 className="h-3.5 w-3.5" />
                   <span>Snippet</span>
-                </button>
+                </Button>
               </div>
               {selectedTool.description && (
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   {selectedTool.description}
                 </p>
               )}
@@ -216,149 +230,135 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
             />
           </div>
 
-          {/* Right: Response Output & History */}
-          <div className="flex-1 flex flex-col bg-[#0b0f19] overflow-hidden">
-            {/* Header: Latency & Response Controls */}
-            <div className="px-6 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
-              <div className="flex items-center space-x-3">
-                <span className="text-xs font-semibold text-slate-300">Execution Output</span>
+          {/* Output */}
+          <div className="flex-1 flex flex-col bg-surface-950 overflow-hidden">
+            <div className="px-5 py-3 border-b border-surface-800 flex items-center justify-between gap-3 bg-surface-900/40">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-semibold text-slate-300">
+                  Execution Output
+                </span>
                 {lastLatency !== null && (
-                  <div className="flex items-center space-x-1.5 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                  <Badge tone="success" className="font-mono text-[11px]">
                     <Clock className="h-3 w-3" />
-                    <span>{lastLatency}ms</span>
-                  </div>
+                    {lastLatency}ms
+                  </Badge>
                 )}
                 {lastError && (
-                  <div className="flex items-center space-x-1 text-xs font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
+                  <Badge tone="danger" className="font-mono text-[11px]">
                     <AlertCircle className="h-3 w-3" />
-                    <span>Error</span>
-                  </div>
+                    Error
+                  </Badge>
                 )}
                 {lastResult && !lastError && (
-                  <div className="flex items-center space-x-1 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                  <Badge tone="success" className="font-mono text-[11px]">
                     <CheckCircle2 className="h-3 w-3" />
-                    <span>Success</span>
-                  </div>
+                    Success
+                  </Badge>
                 )}
               </div>
 
               {lastResult && (
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg text-xs">
-                    <button
-                      onClick={() => setActiveResultTab('formatted')}
-                      className={`px-2 py-0.5 rounded font-medium ${
-                        activeResultTab === 'formatted'
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Formatted
-                    </button>
-                    {lastResult.structuredData && (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-surface-900 border border-surface-800 rounded-md p-0.5 gap-0.5">
+                    {(['formatted', 'structured', 'raw'] as const).map((tab) => (
                       <button
-                        onClick={() => setActiveResultTab('structured')}
-                        className={`px-2 py-0.5 rounded font-medium ${
-                          activeResultTab === 'structured'
-                            ? 'bg-indigo-600 text-white'
+                        key={tab}
+                        onClick={() => setActiveResultTab(tab)}
+                        className={cn(
+                          'px-2 py-0.5 text-[11px] font-medium rounded transition-colors capitalize',
+                          activeResultTab === tab
+                            ? 'bg-surface-800 text-slate-200'
                             : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                        )}
                       >
-                        Structured
+                        {tab}
                       </button>
-                    )}
-                    <button
-                      onClick={() => setActiveResultTab('raw')}
-                      className={`px-2 py-0.5 rounded font-medium ${
-                        activeResultTab === 'raw'
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      Raw JSON
-                    </button>
+                    ))}
                   </div>
 
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() =>
-                      copyToClipboard(
-                        JSON.stringify(lastResult, null, 2)
-                      )
+                      copyToClipboard(JSON.stringify(lastResult, null, 2))
                     }
-                    className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-                    title="Copy Result"
+                    title="Copy result"
                   >
                     {copied ? (
-                      <Check className="h-4 w-4 text-emerald-400" />
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
                     ) : (
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-3.5 w-3.5" />
                     )}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
 
-            {/* Output Body */}
-            <div className="flex-1 p-6 overflow-y-auto">
+            <div className="flex-1 p-5 overflow-y-auto">
               {isExecuting ? (
-                <div className="h-full flex flex-col items-center justify-center space-y-3 text-slate-500">
-                  <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-xs font-mono">Calling {selectedTool.name}...</span>
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                  <Spinner />
+                  <span className="text-xs font-mono">
+                    Calling {selectedTool.name}...
+                  </span>
                 </div>
               ) : lastError ? (
-                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl space-y-2">
-                  <div className="flex items-center space-x-2 text-rose-400 text-xs font-semibold">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>Tool Execution Failed</span>
-                  </div>
-                  <pre className="text-xs font-mono text-rose-300 whitespace-pre-wrap">
-                    {lastError}
-                  </pre>
-                </div>
+                <Card className="border-rose-500/25 bg-rose-950/10">
+                  <CardBody>
+                    <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold mb-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>Tool Execution Failed</span>
+                    </div>
+                    <pre className="text-xs font-mono text-rose-300 whitespace-pre-wrap leading-relaxed">
+                      {lastError}
+                    </pre>
+                  </CardBody>
+                </Card>
               ) : lastResult ? (
                 <div>
                   {activeResultTab === 'formatted' ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {lastResult.content?.map((c: any, idx: number) => (
                         <div
                           key={idx}
-                          className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed selection:bg-indigo-500/30"
+                          className="bg-surface-900/60 border border-surface-800 rounded-lg p-4 text-xs font-mono text-slate-200 whitespace-pre-wrap leading-relaxed"
                         >
                           {c.text}
                         </div>
                       ))}
                     </div>
                   ) : activeResultTab === 'structured' ? (
-                    <pre className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs font-mono text-indigo-300 overflow-x-auto">
+                    <pre className="code-block">
                       {JSON.stringify(lastResult.structuredData, null, 2)}
                     </pre>
                   ) : (
-                    <pre className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs font-mono text-indigo-300 overflow-x-auto">
+                    <pre className="code-block">
                       {JSON.stringify(lastResult, null, 2)}
                     </pre>
                   )}
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-slate-500">
-                  <Play className="h-8 w-8 text-slate-700" />
-                  <p className="text-xs">
-                    Fill the parameters on the left and click <span className="text-indigo-400 font-semibold">Run Tool</span>.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Play}
+                  title="Ready to execute"
+                  description="Fill the parameters on the left and click Run Tool."
+                />
               )}
             </div>
 
-            {/* Run History Drawer (Bottom) */}
+            {/* History */}
             {history.length > 0 && (
-              <div className="border-t border-slate-800 bg-slate-950/70 p-3">
+              <div className="border-t border-surface-800 bg-surface-950 p-3">
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                  <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
-                    <RotateCcw className="h-3 w-3 text-indigo-400" />
-                    <span>Recent Tool Executions</span>
+                  <span className="font-medium flex items-center gap-1.5">
+                    <RotateCcw className="h-3 w-3 text-brand-400" />
+                    <span>Recent Runs</span>
                   </span>
-                  <span className="text-[11px] font-mono text-slate-500">{history.length} runs</span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    {history.length} runs
+                  </span>
                 </div>
-                <div className="flex space-x-2 overflow-x-auto pb-1">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {history.map((item) => (
                     <button
                       key={item.id}
@@ -368,13 +368,17 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
                         setLastLatency(item.latencyMs);
                         setLastError(item.error || null);
                       }}
-                      className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-left shrink-0 transition-colors"
+                      className="px-2.5 py-1.5 bg-surface-900 hover:bg-surface-800 border border-surface-800 rounded-lg text-left shrink-0 transition-colors"
                     >
-                      <div className="font-mono text-[11px] text-indigo-300">{item.toolName}</div>
-                      <div className="text-[10px] text-slate-500 font-mono flex items-center space-x-1">
+                      <div className="font-mono text-[11px] text-brand-300">
+                        {item.toolName}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
                         <span>{item.latencyMs}ms</span>
-                        <span>•</span>
-                        <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
+                        <span>·</span>
+                        <span>
+                          {new Date(item.timestamp).toLocaleTimeString()}
+                        </span>
                       </div>
                     </button>
                   ))}

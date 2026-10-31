@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import {
-  Sparkles,
-  Search,
-  MessageSquare,
   ArrowRight,
+  Bot,
+  Check,
   Clock,
   Copy,
-  Check,
-  Bot,
-  User,
-  Shield
+  MessageSquare,
+  Search,
+  Shield,
+  Sparkles,
+  User
 } from 'lucide-react';
 import { PromptItem } from '../../types';
 import { api } from '../../lib/api';
+import { Badge, Button, Card, CardBody, EmptyState, Spinner } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface PromptsViewProps {
   prompts: PromptItem[];
@@ -76,8 +78,11 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-slate-500 font-mono text-xs">
-        Loading prompts from active MCP server...
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Spinner />
+          <span className="text-xs font-mono">Loading prompts...</span>
+        </div>
       </div>
     );
   }
@@ -90,9 +95,9 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left Column: Prompts List */}
-      <div className="w-80 border-r border-slate-800 bg-[#0c1222] flex flex-col shrink-0">
-        <div className="p-3 border-b border-slate-800">
+      {/* Prompt list */}
+      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+        <div className="p-3 border-b border-surface-800">
           <div className="relative">
             <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -100,7 +105,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
               placeholder="Search prompts..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
             />
           </div>
         </div>
@@ -112,15 +117,23 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
               <button
                 key={p.name}
                 onClick={() => handleSelectPrompt(p)}
-                className={`w-full text-left p-2.5 rounded-xl transition-all ${
+                className={cn(
+                  'w-full text-left p-2.5 rounded-lg transition-colors',
                   isSelected
-                    ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-200'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                }`}
+                    ? 'bg-brand-600/15 text-brand-200'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+                )}
               >
-                <div className="flex items-center space-x-2">
-                  <Sparkles className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-500'}`} />
-                  <span className="font-mono text-xs font-semibold truncate">{p.name}</span>
+                <div className="flex items-center gap-2">
+                  <Sparkles
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0',
+                      isSelected ? 'text-brand-400' : 'text-slate-500'
+                    )}
+                  />
+                  <span className="font-mono text-xs font-semibold truncate">
+                    {p.name}
+                  </span>
                 </div>
                 {p.description && (
                   <p className="text-[11px] text-slate-500 truncate mt-1 pl-5">
@@ -133,40 +146,43 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
         </div>
       </div>
 
-      {/* Middle & Right: Parameters & Generated Messages */}
       {selectedPrompt && (
         <div className="flex-1 flex overflow-hidden">
-          {/* Middle: Parameter Editor */}
-          <div className="w-96 border-r border-slate-800 p-6 overflow-y-auto bg-[#0a0f1d] shrink-0 space-y-4">
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-mono text-sm font-bold text-slate-100">
+          {/* Arguments */}
+          <div className="w-96 border-r border-surface-800 p-5 overflow-y-auto bg-surface-950 shrink-0 space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-bold text-slate-100 truncate">
                   {selectedPrompt.name}
                 </span>
-                <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                <Badge tone="brand" className="font-mono text-[10px]">
                   prompt
-                </span>
+                </Badge>
               </div>
               {selectedPrompt.description && (
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   {selectedPrompt.description}
                 </p>
               )}
             </div>
 
-            <div className="space-y-3 pt-2">
-              <div className="text-xs font-semibold text-slate-300">Prompt Arguments</div>
+            <div className="space-y-3 pt-1">
+              <div className="section-label">Arguments</div>
 
               {!selectedPrompt.arguments || selectedPrompt.arguments.length === 0 ? (
-                <div className="text-xs text-slate-500 bg-slate-900/40 p-3 rounded-xl border border-slate-800">
+                <div className="text-xs text-slate-500 bg-surface-900/40 p-3 rounded-lg border border-surface-800">
                   No arguments required for this prompt.
                 </div>
               ) : (
                 selectedPrompt.arguments.map((arg) => (
-                  <div key={arg.name} className="space-y-1">
+                  <div key={arg.name} className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
-                      <span className="font-mono text-indigo-300">{arg.name}</span>
-                      {arg.required && <span className="text-rose-400 text-[10px]">Required</span>}
+                      <span className="font-mono text-brand-300">{arg.name}</span>
+                      {arg.required && (
+                        <span className="text-rose-400 text-[10px] font-medium">
+                          Required
+                        </span>
+                      )}
                     </label>
                     {arg.description && (
                       <p className="text-[11px] text-slate-500">{arg.description}</p>
@@ -178,7 +194,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                         onChange={(e) =>
                           setArgValues({ ...argValues, [arg.name]: e.target.value })
                         }
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"
+                        className="w-full bg-surface-900 border border-surface-800 rounded-md px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
                       />
                     ) : (
                       <input
@@ -188,83 +204,99 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                           setArgValues({ ...argValues, [arg.name]: e.target.value })
                         }
                         placeholder={`Enter ${arg.name}...`}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full bg-surface-900 border border-surface-800 rounded-md px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                       />
                     )}
                   </div>
                 ))
               )}
 
-              <button
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full justify-center"
                 onClick={handleGenerate}
                 disabled={isGenerating}
-                className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all flex items-center justify-center space-x-2"
               >
-                <span>{isGenerating ? 'Rendering...' : 'Get Prompt (prompts/get)'}</span>
+                <span>{isGenerating ? 'Rendering...' : 'Get Prompt'}</span>
                 <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
 
-          {/* Right: Rendered Messages */}
-          <div className="flex-1 flex flex-col bg-[#0b0f19] overflow-hidden">
-            <div className="px-6 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
-              <div className="flex items-center space-x-3">
-                <span className="text-xs font-semibold text-slate-300">Generated Messages</span>
+          {/* Rendered messages */}
+          <div className="flex-1 flex flex-col bg-surface-950 overflow-hidden">
+            <div className="px-5 py-3 border-b border-surface-800 flex items-center justify-between bg-surface-900/40">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-300">
+                  Generated Messages
+                </span>
                 {latency !== null && (
-                  <div className="flex items-center space-x-1 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                  <Badge tone="success" className="font-mono text-[11px]">
                     <Clock className="h-3 w-3" />
-                    <span>{latency}ms</span>
-                  </div>
+                    {latency}ms
+                  </Badge>
                 )}
               </div>
 
               {result && (
-                <button
-                  onClick={() => copyToClipboard(JSON.stringify(result.messages, null, 2))}
-                  className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-1 text-xs"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    copyToClipboard(JSON.stringify(result.messages, null, 2))
+                  }
                 >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>Copy Messages</span>
-                </button>
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  <span>Copy</span>
+                </Button>
               )}
             </div>
 
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
+            <div className="flex-1 p-5 overflow-y-auto space-y-3">
               {isGenerating ? (
-                <div className="h-full flex flex-col items-center justify-center space-y-3 text-slate-500">
-                  <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-xs font-mono">Generating prompt template...</span>
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                  <Spinner />
+                  <span className="text-xs font-mono">Generating prompt...</span>
                 </div>
               ) : error ? (
-                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs font-mono text-rose-300">
-                  {error}
-                </div>
+                <Card className="border-rose-500/25 bg-rose-950/10">
+                  <CardBody>
+                    <pre className="text-xs font-mono text-rose-300 whitespace-pre-wrap">
+                      {error}
+                    </pre>
+                  </CardBody>
+                </Card>
               ) : result?.messages ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {result.messages.map((m: any, idx: number) => {
                     const isSystem = m.role === 'system';
                     const isUser = m.role === 'user';
                     return (
                       <div
                         key={idx}
-                        className={`rounded-2xl p-4 border space-y-2 ${
+                        className={cn(
+                          'rounded-lg p-4 border space-y-2',
                           isSystem
-                            ? 'bg-purple-950/20 border-purple-500/30'
+                            ? 'bg-purple-950/15 border-purple-500/25'
                             : isUser
-                            ? 'bg-indigo-950/20 border-indigo-500/30'
-                            : 'bg-emerald-950/20 border-emerald-500/30'
-                        }`}
+                            ? 'bg-brand-950/20 border-brand-500/25'
+                            : 'bg-emerald-950/15 border-emerald-500/25'
+                        )}
                       >
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2">
                           {isSystem ? (
                             <Shield className="h-4 w-4 text-purple-400" />
                           ) : isUser ? (
-                            <User className="h-4 w-4 text-indigo-400" />
+                            <User className="h-4 w-4 text-brand-400" />
                           ) : (
                             <Bot className="h-4 w-4 text-emerald-400" />
                           )}
-                          <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
+                          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-300">
                             {m.role}
                           </span>
                         </div>
@@ -278,12 +310,11 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                   })}
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 space-y-2">
-                  <MessageSquare className="h-8 w-8 text-slate-700" />
-                  <p className="text-xs">
-                    Configure prompt parameters on the left and click <span className="text-indigo-400 font-semibold">Get Prompt</span>.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="No prompt rendered yet"
+                  description="Configure the arguments on the left and click Get Prompt to preview the conversation."
+                />
               )}
             </div>
           </div>

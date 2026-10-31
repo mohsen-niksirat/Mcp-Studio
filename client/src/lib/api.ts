@@ -87,6 +87,18 @@ export const api = {
     return res.json();
   },
 
+  async reconnect(id: string): Promise<ServerState> {
+    if (isStandaloneWeb) {
+      return browserAdapter.getActiveState();
+    }
+    const res = await fetch(`${API_BASE}/servers/${id}/reconnect`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Reconnection failed' }));
+      throw new Error(err.error || 'Reconnection failed');
+    }
+    return res.json();
+  },
+
   async disconnect(): Promise<void> {
     if (isStandaloneWeb) return;
     await fetch(`${API_BASE}/servers/disconnect`, { method: 'POST' });

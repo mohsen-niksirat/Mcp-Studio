@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ServerConfig,
   ServerState,
@@ -45,11 +45,53 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const wsReconnectTimer = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  const fetchEntitiesRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const handleCrashRef = useRef<(serverId: string) => void>(() => {});
+
+  const fetchActiveEntities = useCallback(async () => {
+    setIsLoadingEntities(true);
+    try {
+      const [toolList, resData, promptList] = await Promise.all([
+        api.listTools().catch(() => []),
+        api.listResources().catch(() => ({ resources: [], templates: [] })),
+        api.listPrompts().catch(() => [])
+      ]);
+      setTools(toolList);
+      setResources(resData.resources || []);
+      setTemplates(resData.templates || []);
+      setPrompts(promptList);
+    } catch (e) {
+      console.error('Failed to fetch MCP entities:', e);
+    } finally {
+      setIsLoadingEntities(false);
+    }
+  }, []);
+
+  const handleCrash = useCallback((serverId: string) => {
+    setTools([]);
+    setResources([]);
+    setTemplates([]);
+    setPrompts([]);
+    // Offer a one-click clean-session reconnect instead of leaving the UI
+    // parked on a dead state.
+    if (serverId) {
+      api.reconnect(serverId).catch((e) => console.warn('Reconnect failed:', e));
+    }
+  }, []);
+
+  // Keep latest handlers reachable from stable socket callbacks.
+  useEffect(() => {
+    fetchEntitiesRef.current = fetchActiveEntities;
+    handleCrashRef.current = handleCrash;
+  }, [fetchActiveEntities, handleCrash]);
 
   // Initial data fetch & WebSocket connection
   useEffect(() => {
+    mountedRef.current = true;
     loadServers();
-    setupWebSocket();
+    connectWebSocket();
 
     // Global keyboard shortcut: Ctrl+K / Cmd+K
     const handleGlobalKey = (e: KeyboardEvent) => {
@@ -66,13 +108,19 @@ export const App: React.FC = () => {
     });
 
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('keydown', handleGlobalKey);
+      if (wsReconnectTimer.current !== null) {
+        window.clearTimeout(wsReconnectTimer.current);
+        wsReconnectTimer.current = null;
+      }
       wsRef.current?.close();
+      wsRef.current = null;
       unsubscribeBrowserLogs();
     };
   }, []);
 
-  const setupWebSocket = () => {
+  const connectWebSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/ws`;
@@ -90,8 +138,11 @@ export const App: React.FC = () => {
           } else if (data.type === 'state:changed') {
             setActiveState(data.payload);
             if (data.payload.status === 'connected') {
-              fetchActiveEntities();
+              fetchEntitiesRef.current();
             }
+          } else if (data.type === 'state:crashed') {
+            setActiveState(data.payload);
+            handleCrashRef.current(data.payload?.serverId || '');
           } else if (data.type === 'log') {
             setLogs((prev) => [...prev.slice(-300), data.payload]);
           } else if (data.type === 'logs:cleared') {
@@ -103,8 +154,9 @@ export const App: React.FC = () => {
       };
 
       ws.onclose = () => {
-        // Reconnect after 3 seconds
-        setTimeout(setupWebSocket, 3000);
+        if (!mountedRef.current) return;
+        // Reconnect after 3 seconds (tracked so we can cancel on unmount).
+        wsReconnectTimer.current = window.setTimeout(connectWebSocket, 3000);
       };
     } catch (e) {
       console.warn('[WebSocket] Connection failed', e);
@@ -130,25 +182,6 @@ export const App: React.FC = () => {
       console.error(e);
     } finally {
       setIsLoadingServers(false);
-    }
-  };
-
-  const fetchActiveEntities = async () => {
-    setIsLoadingEntities(true);
-    try {
-      const [toolList, resData, promptList] = await Promise.all([
-        api.listTools().catch(() => []),
-        api.listResources().catch(() => ({ resources: [], templates: [] })),
-        api.listPrompts().catch(() => [])
-      ]);
-      setTools(toolList);
-      setResources(resData.resources || []);
-      setTemplates(resData.templates || []);
-      setPrompts(promptList);
-    } catch (e) {
-      console.error('Failed to fetch MCP entities:', e);
-    } finally {
-      setIsLoadingEntities(false);
     }
   };
 
@@ -193,7 +226,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#090d16] text-slate-100 overflow-hidden">
+    <div className="flex flex-col h-screen bg-surface-950 text-slate-100 overflow-hidden">
       {/* Top Header */}
       <Navbar
         servers={servers}

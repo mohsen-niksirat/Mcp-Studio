@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Terminal, Globe, Download, Check, Sparkles, Folder } from 'lucide-react';
+import { Download, Globe, Plus, Sparkles, Terminal, X } from 'lucide-react';
 import { ServerConfig, TransportType } from '../../types';
 import { api } from '../../lib/api';
+import { Button } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface ServerModalProps {
   isOpen: boolean;
@@ -26,7 +28,6 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Import state
   const [detectedConfigs, setDetectedConfigs] = useState<any[]>([]);
   const [isLoadingDetected, setIsLoadingDetected] = useState(false);
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
@@ -53,7 +54,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         });
       });
       setSelectedToImport(initialSelected);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
     } finally {
       setIsLoadingDetected(false);
@@ -78,7 +79,6 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         try {
           parsedEnv = JSON.parse(envStr);
         } catch {
-          // parse KEY=VAL lines
           parsedEnv = {};
           envStr.split('\n').forEach((line) => {
             const [k, ...v] = line.split('=');
@@ -145,44 +145,46 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="server-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
     >
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-surface-950 border border-surface-800 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Sparkles className="h-5 w-5 text-indigo-400" />
-            <h2 id="server-modal-title" className="text-base font-semibold text-slate-100">
+        <div className="px-5 py-4 border-b border-surface-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-brand-400" />
+            <h2 id="server-modal-title" className="text-sm font-semibold text-slate-100">
               MCP Server Management
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800"
+            className="text-slate-400 hover:text-slate-200 p-1.5 rounded-md hover:bg-surface-800 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-800 bg-slate-900/50 px-6">
+        <div className="flex border-b border-surface-800 px-5">
           <button
             onClick={() => setTab('create')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors ${
+            className={cn(
+              'py-3 px-3 text-xs font-medium border-b-2 transition-colors',
               tab === 'create'
-                ? 'border-indigo-500 text-indigo-300'
+                ? 'border-brand-500 text-brand-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+            )}
           >
             Add New Server
           </button>
           <button
             onClick={() => setTab('import')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-1.5 ${
+            className={cn(
+              'py-3 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5',
               tab === 'import'
-                ? 'border-indigo-500 text-indigo-300'
+                ? 'border-brand-500 text-brand-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+            )}
           >
             <Download className="h-3.5 w-3.5" />
             <span>Auto-Import (Claude & Cursor)</span>
@@ -190,9 +192,9 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-5 overflow-y-auto flex-1">
           {error && (
-            <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs">
+            <div className="mb-4 p-3 bg-rose-950/20 border border-rose-500/25 rounded-lg text-rose-300 text-xs">
               {error}
             </div>
           )}
@@ -200,7 +202,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           {tab === 'create' ? (
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label htmlFor="server-name" className="block text-xs font-medium text-slate-300 mb-1">
+                <label htmlFor="server-name" className="block text-xs font-medium text-slate-300 mb-1.5">
                   Server Name
                 </label>
                 <input
@@ -209,11 +211,10 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   placeholder="e.g. Local Filesystem MCP"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                 />
               </div>
 
-              {/* Transport Switcher */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Transport Type
@@ -222,13 +223,14 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setTransport('stdio')}
-                    className={`flex items-center space-x-2.5 p-3 rounded-xl border text-left transition-all ${
+                    className={cn(
+                      'flex items-center gap-2.5 p-3 rounded-lg border text-left transition-colors',
                       transport === 'stdio'
-                        ? 'bg-indigo-600/15 border-indigo-500/40 text-indigo-200'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
+                        ? 'bg-brand-600/15 border-brand-500/40 text-brand-200'
+                        : 'bg-surface-900/60 border-surface-800 text-slate-400 hover:border-surface-700'
+                    )}
                   >
-                    <Terminal className="h-4 w-4 shrink-0 text-indigo-400" />
+                    <Terminal className="h-4 w-4 shrink-0 text-brand-400" />
                     <div>
                       <div className="text-xs font-semibold">stdio (Subprocess)</div>
                       <div className="text-[11px] text-slate-500">npx, python, node, uvx</div>
@@ -238,13 +240,14 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setTransport('sse')}
-                    className={`flex items-center space-x-2.5 p-3 rounded-xl border text-left transition-all ${
+                    className={cn(
+                      'flex items-center gap-2.5 p-3 rounded-lg border text-left transition-colors',
                       transport === 'sse'
-                        ? 'bg-indigo-600/15 border-indigo-500/40 text-indigo-200'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
+                        ? 'bg-brand-600/15 border-brand-500/40 text-brand-200'
+                        : 'bg-surface-900/60 border-surface-800 text-slate-400 hover:border-surface-700'
+                    )}
                   >
-                    <Globe className="h-4 w-4 shrink-0 text-indigo-400" />
+                    <Globe className="h-4 w-4 shrink-0 text-brand-400" />
                     <div>
                       <div className="text-xs font-semibold">SSE (Remote HTTP)</div>
                       <div className="text-[11px] text-slate-500">Server-Sent Events URL</div>
@@ -256,7 +259,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
               {transport === 'stdio' ? (
                 <>
                   <div>
-                    <label htmlFor="server-command" className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-command" className="block text-xs font-medium text-slate-300 mb-1.5">
                       Command
                     </label>
                     <input
@@ -265,11 +268,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="npx or python or node"
                       value={command}
                       onChange={(e) => setCommand(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                     />
                   </div>
                   <div>
-                    <label htmlFor="server-args" className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-args" className="block text-xs font-medium text-slate-300 mb-1.5">
                       Arguments (space separated)
                     </label>
                     <input
@@ -278,11 +281,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="-y @modelcontextprotocol/server-filesystem C:\Path"
                       value={argsStr}
                       onChange={(e) => setArgsStr(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                     />
                   </div>
                   <div>
-                    <label htmlFor="server-env" className="block text-xs font-medium text-slate-300 mb-1">
+                    <label htmlFor="server-env" className="block text-xs font-medium text-slate-300 mb-1.5">
                       Environment Variables (KEY=VALUE or JSON)
                     </label>
                     <textarea
@@ -291,46 +294,41 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="API_KEY=xyz123&#10;DEBUG=true"
                       value={envStr}
                       onChange={(e) => setEnvStr(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
                     />
                   </div>
                 </>
               ) : (
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                  <label htmlFor="server-url" className="block text-xs font-medium text-slate-300 mb-1.5">
                     SSE Endpoint URL
                   </label>
                   <input
+                    id="server-url"
                     type="url"
                     placeholder="http://localhost:8000/sse"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                   />
                 </div>
               )}
 
-              <div className="pt-2 flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 rounded-xl transition-colors"
-                >
+              <div className="pt-2 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={onClose}>
                   Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all"
-                >
+                </Button>
+                <Button type="submit" variant="primary" disabled={isSubmitting}>
+                  <Plus className="h-3.5 w-3.5" />
                   {isSubmitting ? 'Saving...' : 'Add Server'}
-                </button>
+                </Button>
               </div>
             </form>
           ) : (
             <div className="space-y-4">
-              <p className="text-xs text-slate-400">
-                MCP-Studio automatically scanned your system for MCP configurations in Claude Desktop and Cursor.
+              <p className="text-xs text-slate-400 leading-relaxed">
+                MCP-Studio automatically scanned your system for MCP configurations
+                in Claude Desktop, Cursor, and Antigravity.
               </p>
 
               {isLoadingDetected ? (
@@ -338,15 +336,15 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   Scanning config files...
                 </div>
               ) : detectedConfigs.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500 bg-slate-900/40 border border-slate-800 rounded-xl">
+                <div className="py-8 text-center text-xs text-slate-500 bg-surface-900/40 border border-surface-800 rounded-lg">
                   No existing MCP configuration files found on standard system paths.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {detectedConfigs.map((group, gIdx) => (
-                    <div key={gIdx} className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2">
+                    <div key={gIdx} className="bg-surface-900/70 border border-surface-800 rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between text-xs font-medium text-slate-300">
-                        <span className="capitalize text-indigo-400 font-semibold">
+                        <span className="capitalize text-brand-300 font-semibold">
                           {group.source} Config
                         </span>
                         <span className="text-[11px] font-mono text-slate-500 truncate max-w-[280px]">
@@ -358,7 +356,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                         {group.servers.map((s: any) => (
                           <label
                             key={s.id}
-                            className="flex items-center space-x-3 p-2 bg-slate-800/40 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
+                            className="flex items-center gap-3 p-2 bg-surface-800/40 hover:bg-surface-800/80 rounded-md cursor-pointer transition-colors"
                           >
                             <input
                               type="checkbox"
@@ -369,7 +367,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                                   [s.id]: e.target.checked
                                 })
                               }
-                              className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0"
+                              className="rounded bg-surface-900 border-surface-700 text-brand-600 focus:ring-brand-500/40 focus:ring-offset-0"
                             />
                             <div className="flex-1 truncate">
                               <div className="text-xs font-medium text-slate-200">{s.name}</div>
@@ -383,22 +381,14 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     </div>
                   ))}
 
-                  <div className="pt-2 flex justify-end space-x-2">
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 rounded-xl transition-colors"
-                    >
+                  <div className="pt-2 flex justify-end gap-2">
+                    <Button variant="ghost" onClick={onClose}>
                       Cancel
-                    </button>
-                    <button
-                      onClick={handleImportSubmit}
-                      disabled={isSubmitting}
-                      className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/20 disabled:opacity-50 transition-all flex items-center space-x-1.5"
-                    >
+                    </Button>
+                    <Button variant="primary" onClick={handleImportSubmit} disabled={isSubmitting}>
                       <Download className="h-3.5 w-3.5" />
-                      <span>{isSubmitting ? 'Importing...' : 'Import Selected'}</span>
-                    </button>
+                      {isSubmitting ? 'Importing...' : 'Import Selected'}
+                    </Button>
                   </div>
                 </div>
               )}

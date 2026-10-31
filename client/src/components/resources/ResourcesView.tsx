@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import {
-  FolderArchive,
-  Search,
-  FileText,
-  FileCode,
+  ArrowRight,
   Clock,
   Copy,
   Check,
-  ExternalLink,
+  FileCode,
+  FileText,
+  FolderArchive,
   Layers,
-  ArrowRight
+  Search
 } from 'lucide-react';
 import { ResourceItem, ResourceTemplateItem } from '../../types';
 import { api } from '../../lib/api';
+import { Badge, Button, Card, CardBody, EmptyState, Spinner } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface ResourcesViewProps {
   resources: ResourceItem[];
@@ -104,8 +105,11 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8 text-slate-500 font-mono text-xs">
-        Loading resources from active MCP server...
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <Spinner />
+          <span className="text-xs font-mono">Loading resources...</span>
+        </div>
       </div>
     );
   }
@@ -118,9 +122,9 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      {/* Left Column: Resource Tree & Templates */}
-      <div className="w-80 border-r border-slate-800 bg-[#0c1222] flex flex-col shrink-0">
-        <div className="p-3 border-b border-slate-800">
+      {/* Resource list */}
+      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+        <div className="p-3 border-b border-surface-800">
           <div className="relative">
             <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -128,16 +132,15 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
               placeholder="Search resources..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-3">
-          {/* Static Resources */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-4">
           <div>
-            <div className="px-2 py-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Exposed Resources ({filteredResources.length})
+            <div className="px-2 py-1 section-label">
+              Resources ({filteredResources.length})
             </div>
             <div className="space-y-1 mt-1">
               {filteredResources.map((r) => {
@@ -146,15 +149,23 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
                   <button
                     key={r.uri}
                     onClick={() => handleSelectResource(r)}
-                    className={`w-full text-left p-2.5 rounded-xl transition-all ${
+                    className={cn(
+                      'w-full text-left p-2.5 rounded-lg transition-colors',
                       isSelected
-                        ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-200'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                    }`}
+                        ? 'bg-brand-600/15 text-brand-200'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+                    )}
                   >
-                    <div className="flex items-center space-x-2">
-                      <FileCode className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-500'}`} />
-                      <span className="font-medium text-xs truncate">{r.name}</span>
+                    <div className="flex items-center gap-2">
+                      <FileCode
+                        className={cn(
+                          'h-3.5 w-3.5 shrink-0',
+                          isSelected ? 'text-brand-400' : 'text-slate-500'
+                        )}
+                      />
+                      <span className="text-xs font-medium truncate">
+                        {r.name}
+                      </span>
                     </div>
                     <div className="text-[10px] font-mono text-slate-500 truncate mt-1 pl-5">
                       {r.uri}
@@ -165,28 +176,36 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
             </div>
           </div>
 
-          {/* Resource Templates */}
           {templates.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                Resource Templates ({templates.length})
+              <div className="px-2 py-1 section-label">
+                Templates ({templates.length})
               </div>
               <div className="space-y-1 mt-1">
                 {templates.map((tmpl) => {
-                  const isSelected = selectedTemplate?.uriTemplate === tmpl.uriTemplate;
+                  const isSelected =
+                    selectedTemplate?.uriTemplate === tmpl.uriTemplate;
                   return (
                     <button
                       key={tmpl.uriTemplate}
                       onClick={() => handleSelectTemplate(tmpl)}
-                      className={`w-full text-left p-2.5 rounded-xl transition-all ${
+                      className={cn(
+                        'w-full text-left p-2.5 rounded-lg transition-colors',
                         isSelected
-                          ? 'bg-indigo-600/15 border border-indigo-500/30 text-indigo-200'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
-                      }`}
+                          ? 'bg-brand-600/15 text-brand-200'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+                      )}
                     >
-                      <div className="flex items-center space-x-2">
-                        <Layers className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-500'}`} />
-                        <span className="font-medium text-xs truncate">{tmpl.name}</span>
+                      <div className="flex items-center gap-2">
+                        <Layers
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0',
+                            isSelected ? 'text-brand-400' : 'text-slate-500'
+                          )}
+                        />
+                        <span className="text-xs font-medium truncate">
+                          {tmpl.name}
+                        </span>
                       </div>
                       <div className="text-[10px] font-mono text-slate-500 truncate mt-1 pl-5">
                         {tmpl.uriTemplate}
@@ -200,105 +219,116 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({
         </div>
       </div>
 
-      {/* Right Column: Preview & Template Resolver */}
-      <div className="flex-1 flex flex-col bg-[#0b0f19] overflow-hidden">
-        {/* Template Input Bar (if template selected) */}
+      {/* Preview */}
+      <div className="flex-1 flex flex-col bg-surface-950 overflow-hidden">
         {selectedTemplate && (
-          <div className="p-4 bg-slate-900/60 border-b border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-semibold text-indigo-300">
-                  Parameterize Template: {selectedTemplate.name}
-                </span>
-                <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-                  {selectedTemplate.uriTemplate}
-                </p>
-              </div>
+          <div className="p-4 bg-surface-900/40 border-b border-surface-800 space-y-3">
+            <div>
+              <span className="text-xs font-semibold text-brand-300">
+                {selectedTemplate.name}
+              </span>
+              <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                {selectedTemplate.uriTemplate}
+              </p>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-end gap-3">
               {Object.keys(templateParams).map((key) => (
                 <div key={key} className="flex-1">
-                  <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                  <label className="block text-[11px] font-mono text-slate-500 mb-1">
                     {`{${key}}`}
                   </label>
                   <input
                     type="text"
                     value={templateParams[key]}
                     onChange={(e) =>
-                      setTemplateParams({ ...templateParams, [key]: e.target.value })
+                      setTemplateParams({
+                        ...templateParams,
+                        [key]: e.target.value
+                      })
                     }
                     placeholder={`Value for ${key}...`}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-surface-900 border border-surface-800 rounded-md px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                   />
                 </div>
               ))}
 
-              <button
+              <Button
+                size="sm"
+                variant="primary"
                 onClick={handleResolveTemplate}
                 disabled={isReading}
-                className="mt-5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-all"
+                className="shrink-0"
               >
-                <span>Read Resource</span>
-                <ArrowRight className="h-3 w-3" />
-              </button>
+                <span>Read</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Content Header */}
-        <div className="px-6 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs font-mono font-medium text-slate-300 truncate max-w-md">
-              {selectedUri || 'No Resource Selected'}
+        <div className="px-5 py-3 border-b border-surface-800 flex items-center justify-between bg-surface-900/40">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-mono text-slate-300 truncate max-w-md">
+              {selectedUri || 'No resource selected'}
             </span>
             {readLatency !== null && (
-              <div className="flex items-center space-x-1 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+              <Badge tone="success" className="font-mono text-[11px]">
                 <Clock className="h-3 w-3" />
-                <span>{readLatency}ms</span>
-              </div>
+                {readLatency}ms
+              </Badge>
             )}
           </div>
 
           {content && (
-            <button
-              onClick={() => copyToClipboard(JSON.stringify(content, null, 2))}
-              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors flex items-center space-x-1 text-xs"
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                copyToClipboard(JSON.stringify(content, null, 2))
+              }
             >
-              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-              <span>Copy</span>
-            </button>
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
           )}
         </div>
 
-        {/* Content Viewer */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 p-5 overflow-y-auto">
           {isReading ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-3 text-slate-500">
-              <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-mono">Reading resource stream...</span>
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+              <Spinner />
+              <span className="text-xs font-mono">Reading resource...</span>
             </div>
           ) : error ? (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs font-mono text-rose-300">
-              {error}
-            </div>
+            <Card className="border-rose-500/25 bg-rose-950/10">
+              <CardBody>
+                <pre className="text-xs font-mono text-rose-300 whitespace-pre-wrap">
+                  {error}
+                </pre>
+              </CardBody>
+            </Card>
           ) : content?.contents?.[0] ? (
             <div className="space-y-3">
-              <div className="flex items-center space-x-2 text-xs">
+              <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-500">MIME:</span>
-                <span className="font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                <Badge tone="brand" className="font-mono text-[10px]">
                   {content.contents[0].mimeType || 'text/plain'}
-                </span>
+                </Badge>
               </div>
-              <pre className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre-wrap leading-relaxed selection:bg-indigo-500/30">
+              <pre className="code-block whitespace-pre-wrap">
                 {content.contents[0].text}
               </pre>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 space-y-2">
-              <FileText className="h-8 w-8 text-slate-700" />
-              <p className="text-xs">Select a resource on the left to read its contents.</p>
-            </div>
+            <EmptyState
+              icon={FileText}
+              title="Select a resource"
+              description="Pick a resource or template on the left to inspect its contents."
+            />
           )}
         </div>
       </div>

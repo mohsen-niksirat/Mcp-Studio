@@ -32,6 +32,19 @@ export interface ServerState {
   lastPingMs?: number;
 }
 
+export interface NotificationEvent {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+export interface CrashEvent {
+  serverId: string;
+  config: ServerConfig;
+  code: number | null;
+  signal: string | null;
+  error: string;
+}
+
 export interface JsonRpcMessageLog {
   id: string;
   timestamp: number;

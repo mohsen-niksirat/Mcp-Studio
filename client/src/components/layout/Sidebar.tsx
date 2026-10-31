@@ -1,17 +1,18 @@
 import React from 'react';
 import {
-  Wrench,
-  FolderArchive,
-  Sparkles,
   Activity,
-  Zap,
-  Layers,
-  FileCode,
-  FileDown,
   Bot,
-  ListChecks
+  FileDown,
+  FolderArchive,
+  Layers,
+  ListChecks,
+  Sparkles,
+  Wrench,
+  Zap
 } from 'lucide-react';
 import { ActiveTab, ServerState } from '../../types';
+import { Badge, Button } from '../ui/primitives';
+import { cn } from '../../lib/cn';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -24,6 +25,56 @@ interface SidebarProps {
   onOpenImport: () => void;
 }
 
+const navItems = [
+  {
+    id: 'chat' as ActiveTab,
+    label: 'AI Chat Sandbox',
+    icon: Bot,
+    badgeLabel: 'AI',
+    description: 'Natural-language tool testing'
+  },
+  {
+    id: 'tools' as ActiveTab,
+    label: 'Tools Runner',
+    icon: Wrench,
+    badgeKey: 'tools',
+    description: 'Execute tools with schema forms'
+  },
+  {
+    id: 'resources' as ActiveTab,
+    label: 'Resources',
+    icon: FolderArchive,
+    badgeKey: 'resources',
+    description: 'Browse exposed resources'
+  },
+  {
+    id: 'prompts' as ActiveTab,
+    label: 'Prompts',
+    icon: Sparkles,
+    badgeKey: 'prompts',
+    description: 'Inspect prompt templates'
+  },
+  {
+    id: 'collections' as ActiveTab,
+    label: 'Test Suites',
+    icon: ListChecks,
+    description: 'Sequential assertion runner'
+  },
+  {
+    id: 'traffic' as ActiveTab,
+    label: 'Protocol Inspector',
+    icon: Activity,
+    badgeKey: 'logs',
+    description: 'Live JSON-RPC stream'
+  },
+  {
+    id: 'benchmark' as ActiveTab,
+    label: 'Benchmark',
+    icon: Zap,
+    description: 'Latency and conformance'
+  }
+];
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onTabChange,
@@ -34,124 +85,80 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeState,
   onOpenImport
 }) => {
-  const navItems = [
-    {
-      id: 'chat' as ActiveTab,
-      label: 'AI Chat Sandbox',
-      icon: Bot,
-      badge: 'AI',
-      badgeColor: 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-bold',
-      description: 'Test tools with autonomous LLM agent'
-    },
-    {
-      id: 'tools' as ActiveTab,
-      label: 'Tools Runner',
-      icon: Wrench,
-      badge: toolCount > 0 ? toolCount : undefined,
-      description: 'Execute tools with dynamic schema forms'
-    },
-    {
-      id: 'resources' as ActiveTab,
-      label: 'Resources',
-      icon: FolderArchive,
-      badge: resourceCount > 0 ? resourceCount : undefined,
-      description: 'Browse contextual resources & templates'
-    },
-    {
-      id: 'prompts' as ActiveTab,
-      label: 'Prompts',
-      icon: Sparkles,
-      badge: promptCount > 0 ? promptCount : undefined,
-      description: 'Inspect & render prompt templates'
-    },
-    {
-      id: 'collections' as ActiveTab,
-      label: 'Test Suites',
-      icon: ListChecks,
-      description: 'Automated scenario runner & assertion tests'
-    },
-    {
-      id: 'traffic' as ActiveTab,
-      label: 'Protocol Inspector',
-      icon: Activity,
-      badge: logCount > 0 ? logCount : undefined,
-      badgeColor: 'bg-emerald-500/20 text-emerald-400',
-      description: 'Live JSON-RPC request & response stream'
-    },
-    {
-      id: 'benchmark' as ActiveTab,
-      label: 'Benchmark & Health',
-      icon: Zap,
-      description: 'Latency metrics & schema conformance'
-    }
-  ];
+  const badgeCount: Record<string, number | undefined> = {
+    tools: toolCount,
+    resources: resourceCount,
+    prompts: promptCount,
+    logs: logCount
+  };
 
   return (
-    <aside className="w-64 border-r border-slate-800 bg-[#0a0f1d] flex flex-col justify-between shrink-0 h-[calc(100vh-4rem)]">
-      {/* Top Nav List */}
-      <div className="p-3 space-y-1">
-        <div className="px-3 py-2 text-[11px] font-semibold tracking-wider uppercase text-slate-500">
-          Studio Workspaces
-        </div>
+    <aside className="w-60 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+        <div className="px-3 py-2 section-label">Workspaces</div>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
+          const count = item.badgeKey ? badgeCount[item.badgeKey] : undefined;
+
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+              className={cn(
+                'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
                 isActive
-                  ? 'bg-indigo-600/15 text-indigo-300 border border-indigo-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-              }`}
+                  ? 'bg-brand-600/15 text-brand-300'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+              )}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <Icon
-                  className={`h-4 w-4 transition-colors ${
-                    isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
-                  }`}
+                  className={cn(
+                    'h-4 w-4 shrink-0',
+                    isActive ? 'text-brand-400' : 'text-slate-500'
+                  )}
                 />
                 <span className="truncate">{item.label}</span>
               </div>
-              {item.badge !== undefined && (
-                <span
-                  className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
-                    item.badgeColor ||
-                    (isActive
-                      ? 'bg-indigo-500/30 text-indigo-300'
-                      : 'bg-slate-800 text-slate-400')
-                  }`}
-                >
-                  {item.badge}
-                </span>
+              {count !== undefined && count > 0 && (
+                <Badge tone={isActive ? 'brand' : 'neutral'}>
+                  {count}
+                </Badge>
+              )}
+              {item.badgeLabel && (
+                <Badge tone="brand" className="uppercase">
+                  {item.badgeLabel}
+                </Badge>
               )}
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Bottom Profile / Quick Action Card */}
-      <div className="p-3 border-t border-slate-800/80 space-y-2">
-        <button
+      <div className="p-3 border-t border-surface-800 space-y-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full justify-center"
           onClick={onOpenImport}
-          className="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-semibold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all"
         >
-          <FileDown className="h-4 w-4 text-indigo-400" />
+          <FileDown className="h-3.5 w-3.5 text-brand-400" />
           <span>Import Configs</span>
-        </button>
+        </Button>
 
         {activeState && (
-          <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 text-xs space-y-1">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="font-medium text-slate-300 truncate max-w-[130px]">
+          <div className="bg-surface-900/50 border border-surface-800 rounded-lg p-2.5 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-300 truncate">
                 {activeState.config.name}
               </span>
-              <span className="font-mono uppercase text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+              <Badge tone="neutral" className="font-mono text-[10px] uppercase">
                 {activeState.config.transport}
-              </span>
+              </Badge>
             </div>
-            <div className="text-[11px] text-slate-500 font-mono truncate">
+            <div className="text-[10px] font-mono text-slate-500">
               {activeState.serverInfo?.protocolVersion
                 ? `MCP ${activeState.serverInfo.protocolVersion}`
                 : 'Protocol 2024-11-05'}

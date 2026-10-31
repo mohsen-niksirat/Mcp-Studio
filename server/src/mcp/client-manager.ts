@@ -1,5 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
   ServerConfig,
   ServerState,
@@ -19,11 +21,15 @@ interface PendingRequest {
   method: string;
 }
 
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+
 export class MCPClientManager extends EventEmitter {
   private servers: Map<string, ServerConfig> = new Map();
   private activeId: string | null = null;
   private activeState: ServerState | null = null;
   private activeProcess: ChildProcess | null = null;
+  private sseClient: Client | null = null;
+  private sseTransport: SSEClientTransport | null = null;
   private mockServer: MockMCPServer = new MockMCPServer();
   private logs: JsonRpcMessageLog[] = [];
   private rpcIdCounter = 1;
@@ -129,7 +135,12 @@ export class MCPClientManager extends EventEmitter {
         return this.activeState!;
       }
 
-      throw new Error(`Transport ${config.transport} is not yet supported in this version.`);
+      if (config.transport === 'sse') {
+        await this.connectSse(config);
+        return this.activeState!;
+      }
+
+      throw new Error(`Transport ${config.transport} is not supported.`);
     } catch (err: any) {
       this.activeState = {
         config,
@@ -270,6 +281,204 @@ export class MCPClientManager extends EventEmitter {
     });
   }
 
+  /**
+   * SSE (Server-Sent Events) transport via the official MCP TypeScript SDK.
+   * The SDK handles endpoint negotiation, JSON-RPC framing, and request
+   * timeouts; we translate its calls back into the same log/state events the
+   * stdio path produces so the UI sees a uniform stream.
+   */
+  private async connectSse(config: ServerConfig): Promise<void> {
+    if (!config.url) {
+      throw new Error('SSE transport requires a url (e.g. http://localhost:8000/sse)');
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(config.url);
+      if (!/^https?:$/i.test(parsed.protocol)) {
+        throw new Error('SSE url must use http(s)');
+      }
+    } catch {
+      throw new Error(`Invalid SSE url: ${config.url}`);
+    }
+
+    const headerEntries = Object.entries(config.headers || {});
+    const transport = new SSEClientTransport(parsed, {
+      requestInit: headerEntries.length > 0 ? { headers: Object.fromEntries(headerEntries) } : undefined
+    });
+    this.sseTransport = transport;
+
+    // Pipe transport-level frames into the protocol inspector. The SDK emits
+    // parsed JSONRPCMessage objects; latency is attributed to the pending RPC
+    // that matches the response id.
+    transport.onmessage = (msg: any) => {
+      const isError = Boolean(msg?.error);
+      const rpcId = msg?.id;
+
+      if (rpcId !== undefined && this.pendingRequests.has(rpcId)) {
+        const pending = this.pendingRequests.get(rpcId)!;
+        this.pendingRequests.delete(rpcId);
+        const latencyMs = Date.now() - pending.timestamp;
+        this.addLog({
+          timestamp: Date.now(),
+          direction: 'incoming',
+          method: pending.method,
+          rpcId,
+          data: msg,
+          latencyMs,
+          isError
+        });
+        if (isError) {
+          pending.reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+        } else {
+          pending.resolve(msg.result);
+        }
+        return;
+      }
+
+      this.addLog({
+        timestamp: Date.now(),
+        direction: 'incoming',
+        method: msg?.method || 'notification',
+        rpcId,
+        data: msg,
+        isError
+      });
+      if (msg?.method) {
+        this.emit('notification', msg);
+      }
+    };
+
+    transport.onerror = (err: Error) => {
+      this.addLog({
+        timestamp: Date.now(),
+        direction: 'incoming',
+        method: 'transport:error',
+        data: { error: err.message },
+        isError: true
+      });
+    };
+
+    transport.onclose = () => {
+      // A closed transport while this SSE session is still the active one
+      // means the remote side went away — surface it the same way a crashed
+      // stdio process is surfaced.
+      if (this.sseTransport !== transport) return;
+      this.sseClient = null;
+      this.sseTransport = null;
+      const message = 'SSE connection closed by the remote server';
+      this.activeState = {
+        config,
+        status: 'error',
+        error: message
+      };
+      this.emit('state:changed', this.activeState);
+      this.emit('state:crashed', {
+        serverId: config.id,
+        config,
+        code: null,
+        signal: null,
+        error: message
+      });
+      for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
+        this.pendingRequests.delete(id);
+        pending.reject(new Error(message));
+      }
+    };
+
+    const client = new Client(
+      { name: 'mcp-studio', version: '1.0.0' },
+      { capabilities: { sampling: {}, roots: { listChanged: true } } }
+    );
+    this.sseClient = client;
+
+    const start = Date.now();
+    await client.connect(transport);
+    const pingMs = Date.now() - start;
+
+    const info = client.getServerVersion();
+    this.activeState = {
+      config,
+      status: 'connected',
+      serverInfo: {
+        name: info?.name || config.name,
+        version: info?.version || 'unknown',
+        protocolVersion: MCP_PROTOCOL_VERSION
+      },
+      connectedAt: Date.now(),
+      lastPingMs: pingMs
+    };
+    this.emit('state:changed', this.activeState);
+  }
+
+  /**
+   * Send a JSON-RPC request over the active SSE session. Unlike stdio (where
+   * we own the frame), the SDK owns request ids; we still log the outgoing
+   * frame so the inspector shows both directions.
+   */
+  private sendSseRequest<T>(method: string, sdkCall: () => Promise<T>): Promise<T> {
+    if (!this.sseClient) {
+      return Promise.reject(new Error('No active SSE connection.'));
+    }
+    const rpcId = `sse-${this.rpcIdCounter++}`;
+    const start = Date.now();
+    this.addLog({
+      timestamp: Date.now(),
+      direction: 'outgoing',
+      method,
+      rpcId,
+      data: { jsonrpc: '2.0', id: rpcId, method }
+    });
+
+    const pending = new Promise<T>((resolve, reject) => {
+      this.pendingRequests.set(rpcId, {
+        resolve: (v: any) => resolve(v),
+        reject,
+        timestamp: start,
+        method
+      });
+    });
+
+    // The SDK resolves with the unwrapped result; settle the pending map entry
+    // ourselves and log the synthetic response frame.
+    sdkCall()
+      .then((res) => {
+        const latencyMs = Date.now() - start;
+        this.addLog({
+          timestamp: Date.now(),
+          direction: 'incoming',
+          method,
+          rpcId,
+          data: { jsonrpc: '2.0', id: rpcId, result: res },
+          latencyMs
+        });
+        const p = this.pendingRequests.get(rpcId);
+        if (p) {
+          this.pendingRequests.delete(rpcId);
+          p.resolve(res);
+        }
+      })
+      .catch((err) => {
+        const latencyMs = Date.now() - start;
+        this.addLog({
+          timestamp: Date.now(),
+          direction: 'incoming',
+          method,
+          rpcId,
+          data: { jsonrpc: '2.0', id: rpcId, error: { message: err.message } },
+          latencyMs,
+          isError: true
+        });
+        const p = this.pendingRequests.get(rpcId);
+        if (p) {
+          this.pendingRequests.delete(rpcId);
+          p.reject(err);
+        }
+      });
+
+    return pending;
+  }
+
   private handleStdoutChunk(chunk: string) {
     this.stdoutBuffer += chunk;
     const lines = this.stdoutBuffer.split('\n');
@@ -394,6 +603,18 @@ export class MCPClientManager extends EventEmitter {
       }
     }
 
+    // Tear down any SSE session before failing pending requests.
+    const sse = this.sseTransport;
+    this.sseClient = null;
+    this.sseTransport = null;
+    if (sse) {
+      try {
+        await sse.close();
+      } catch {
+        // ignore transport teardown failures
+      }
+    }
+
     // Callers awaiting in-flight RPCs must not hang on a closed connection.
     for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
       this.pendingRequests.delete(id);
@@ -460,6 +681,16 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
+    if (this.activeState.config.transport === 'sse') {
+      const res = await this.sendSseRequest('tools/call', () =>
+        this.sseClient!.callTool({ name, arguments: args })
+      );
+      return {
+        ...(res as any),
+        latencyMs: Date.now() - start
+      };
+    }
+
     const res = await this.sendJsonRpcRequest('tools/call', {
       name,
       arguments: args
@@ -479,6 +710,21 @@ export class MCPClientManager extends EventEmitter {
       return {
         resources: this.mockServer.getResources(),
         templates: this.mockServer.getResourceTemplates()
+      };
+    }
+
+    if (this.activeState.config.transport === 'sse') {
+      const [resList, tmplList] = await Promise.all([
+        this.sendSseRequest<any>('resources/list', () =>
+          this.sseClient!.listResources()
+        ).catch(() => ({ resources: [] })),
+        this.sendSseRequest<any>('resources/templates/list', () =>
+          this.sseClient!.listResourceTemplates()
+        ).catch(() => ({ resourceTemplates: [] }))
+      ]);
+      return {
+        resources: resList?.resources || [],
+        templates: tmplList?.resourceTemplates || []
       };
     }
 
@@ -524,6 +770,16 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
+    if (this.activeState.config.transport === 'sse') {
+      const res = await this.sendSseRequest('resources/read', () =>
+        this.sseClient!.readResource({ uri })
+      );
+      return {
+        ...(res as any),
+        latencyMs: Date.now() - start
+      };
+    }
+
     const res = await this.sendJsonRpcRequest('resources/read', { uri });
     return {
       ...res,
@@ -538,6 +794,13 @@ export class MCPClientManager extends EventEmitter {
 
     if (this.activeState.config.transport === 'mock') {
       return this.mockServer.getPrompts();
+    }
+
+    if (this.activeState.config.transport === 'sse') {
+      const res = await this.sendSseRequest<any>('prompts/list', () =>
+        this.sseClient!.listPrompts()
+      );
+      return res?.prompts || [];
     }
 
     const res = await this.sendJsonRpcRequest('prompts/list', {});
@@ -572,6 +835,16 @@ export class MCPClientManager extends EventEmitter {
       return {
         ...res,
         latencyMs
+      };
+    }
+
+    if (this.activeState.config.transport === 'sse') {
+      const res = await this.sendSseRequest('prompts/get', () =>
+        this.sseClient!.getPrompt({ name, arguments: args })
+      );
+      return {
+        ...(res as any),
+        latencyMs: Date.now() - start
       };
     }
 

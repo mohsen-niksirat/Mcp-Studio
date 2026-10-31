@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Code2, Terminal, FileCode } from 'lucide-react';
+import { Check, Code2, Copy, X } from 'lucide-react';
 import { ToolItem } from '../../types';
+import { Button } from '../ui/primitives';
 
 interface CodeSnippetModalProps {
   isOpen: boolean;
@@ -9,21 +10,23 @@ interface CodeSnippetModalProps {
   args: Record<string, any>;
 }
 
+type Lang = 'python' | 'typescript' | 'curl';
+
 export const CodeSnippetModal: React.FC<CodeSnippetModalProps> = ({
   isOpen,
   onClose,
   tool,
   args
 }) => {
-  const [lang, setLang] = useState<'python' | 'typescript' | 'curl'>('python');
+  const [lang, setLang] = useState<Lang>('python');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
   const argsJson = JSON.stringify(args, null, 2);
 
-  const getPythonSnippet = () => {
-    return `import asyncio
+  const snippets: Record<Lang, string> = {
+    python: `import asyncio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -32,11 +35,11 @@ async def run():
         command="npx",
         args=["-y", "@modelcontextprotocol/server-example"]
     )
-    
+
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            
+
             # Call MCP Tool: ${tool.name}
             result = await session.call_tool(
                 name="${tool.name}",
@@ -46,11 +49,8 @@ async def run():
 
 if __name__ == "__main__":
     asyncio.run(run())
-`;
-  };
-
-  const getTypeScriptSnippet = () => {
-    return `import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+`,
+    typescript: `import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 async function main() {
@@ -72,23 +72,15 @@ async function main() {
 }
 
 main().catch(console.error);
-`;
-  };
-
-  const getCurlSnippet = () => {
-    return `# Direct JSON-RPC Call via MCP-Studio Bridge API
+`,
+    curl: `# Direct JSON-RPC call via the MCP-Studio bridge API
 curl -X POST http://localhost:4999/api/servers/active/tools/call \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({ name: tool.name, arguments: args }, null, 2)}'
-`;
+`
   };
 
-  const activeCode =
-    lang === 'python'
-      ? getPythonSnippet()
-      : lang === 'typescript'
-      ? getTypeScriptSnippet()
-      : getCurlSnippet();
+  const activeCode = snippets[lang];
 
   const handleCopy = () => {
     navigator.clipboard.writeText(activeCode);
@@ -96,99 +88,84 @@ curl -X POST http://localhost:4999/api/servers/active/tools/call \\
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const langs: { id: Lang; label: string }[] = [
+    { id: 'python', label: 'Python' },
+    { id: 'typescript', label: 'TypeScript' },
+    { id: 'curl', label: 'cURL' }
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#0f172a] border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="snippet-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+    >
+      <div className="bg-surface-950 border border-surface-800 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
-          <div className="flex items-center space-x-2">
-            <Code2 className="h-5 w-5 text-indigo-400" />
+        <div className="px-5 py-4 border-b border-surface-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-brand-600/15 border border-brand-500/25 flex items-center justify-center">
+              <Code2 className="h-4 w-4 text-brand-400" />
+            </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-100">
+              <h3 id="snippet-modal-title" className="text-sm font-semibold text-slate-100">
                 Code Snippet Generator
               </h3>
-              <p className="text-xs text-slate-400">
-                Integration code for tool: <span className="font-mono text-indigo-300 font-bold">{tool.name}</span>
+              <p className="text-xs text-slate-500">
+                Integration code for{' '}
+                <span className="font-mono text-brand-300 font-medium">
+                  {tool.name}
+                </span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800"
+            className="text-slate-400 hover:text-slate-200 p-1.5 rounded-md hover:bg-surface-800 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Language Tabs & Copy Button */}
-        <div className="px-6 py-3 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setLang('python')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                lang === 'python'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Python
-            </button>
-            <button
-              onClick={() => setLang('typescript')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                lang === 'typescript'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              TypeScript
-            </button>
-            <button
-              onClick={() => setLang('curl')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                lang === 'curl'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              cURL (JSON-RPC)
-            </button>
+        {/* Language tabs */}
+        <div className="px-5 py-3 border-b border-surface-800 flex items-center justify-between">
+          <div className="flex items-center gap-1 bg-surface-900 border border-surface-800 rounded-md p-0.5">
+            {langs.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setLang(l.id)}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  lang === l.id
+                    ? 'bg-surface-800 text-slate-200'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
           </div>
 
-          <button
-            onClick={handleCopy}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg transition-all"
-          >
+          <Button size="sm" variant="secondary" onClick={handleCopy}>
             {copied ? (
               <>
                 <Check className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400">Copied!</span>
+                <span className="text-emerald-400">Copied</span>
               </>
             ) : (
               <>
                 <Copy className="h-3.5 w-3.5" />
-                <span>Copy Code</span>
+                <span>Copy</span>
               </>
             )}
-          </button>
+          </Button>
         </div>
 
-        {/* Code Content */}
-        <div className="p-6 bg-[#090d16] overflow-x-auto max-h-[55vh]">
-          <pre className="font-mono text-xs text-indigo-200 leading-relaxed selection:bg-indigo-500/30 whitespace-pre">
+        {/* Code */}
+        <div className="p-5 bg-surface-950 overflow-x-auto max-h-[55vh]">
+          <pre className="font-mono text-xs text-slate-200 leading-relaxed whitespace-pre">
             {activeCode}
           </pre>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between text-xs text-slate-500">
-          <span>Ready to paste into your AI agent or backend service</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>
