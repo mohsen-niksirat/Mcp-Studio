@@ -11,7 +11,9 @@ const testFiles = [
   'test/index.test.ts',
   'test/chat-proxy.test.ts',
   'test/crash-resilience.test.ts',
-  'test/id-matching.test.ts'
+  'test/id-matching.test.ts',
+  'test/rpc-timeout.test.ts',
+  'test/connect-race.test.ts'
 ];
 
 for (const file of testFiles) {
