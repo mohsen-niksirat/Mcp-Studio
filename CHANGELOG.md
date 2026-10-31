@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-31
+
+### Added
+- **SSE transport**: remote MCP servers over Server-Sent Events are now fully supported
+  in the backend bridge using the official MCP TypeScript SDK (`SSEClientTransport` +
+  `Client`) — connect/disconnect, crash detection on remote close, custom auth headers,
+  and all tools/resources/prompts operations logged into the Protocol Inspector with
+  the same event stream the stdio path produces.
+- **Crash auto-recovery in the UI**: the previously ignored `state:crashed` WebSocket
+  event now clears stale entity lists and automatically issues a clean-session
+  reconnect through the existing `/api/servers/:id/reconnect` endpoint.
+- **Shared design system**: `surface`/`brand` color tokens, reusable UI primitives
+  (`Button`, `Card`, `Badge`, `EmptyState`, `Spinner`, `StatusDot`), a `cn()` class
+  helper, and component-layer CSS (`.glass`, `.code-block`, `.section-label`,
+  `.focus-ring`).
+
+### Fixed
+- WebSocket reconnect timer leak in `App.tsx`: the pending 3s reconnect timer is now
+  tracked and cleared on unmount instead of stacking untracked `setTimeout` calls.
+- Stale tool selection in the Tools Runner: the selected tool now syncs with the live
+  tool catalog instead of pointing at a tool that disappeared after a server switch.
+- Protocol Inspector pause toggle now actually pauses follow-the-latest-frame behavior.
+- `api.reconnect()` client method added to reach the backend reconnect endpoint.
+
+### Changed
+- Full UI refresh: Navbar, Sidebar, and every view (Tools, Resources, Prompts, Traffic,
+  Benchmark, Chat, Collections, ServerModal, CommandPalette) rebuilt on the design
+  system with consistent spacing, visible keyboard focus rings, unified empty states
+  and spinners, and no hardcoded hex colors.
+
 ## [1.3.0] - 2026-10-28
 
 ### Added
@@ -51,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource explorer, prompt inspector, live JSON-RPC traffic view, benchmark suite,
   config importer, in-browser web demo, and Windows desktop executable.
 
+[1.4.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.0.0...v1.1.0
