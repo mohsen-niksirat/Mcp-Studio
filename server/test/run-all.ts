@@ -10,7 +10,8 @@ import { spawnSync } from 'child_process';
 const testFiles = [
   'test/index.test.ts',
   'test/chat-proxy.test.ts',
-  'test/crash-resilience.test.ts'
+  'test/crash-resilience.test.ts',
+  'test/id-matching.test.ts'
 ];
 
 for (const file of testFiles) {

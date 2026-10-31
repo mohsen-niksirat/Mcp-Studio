@@ -314,10 +314,15 @@ export class MCPClientManager extends EventEmitter {
     transport.onmessage = (msg: any) => {
       const isError = Boolean(msg?.error);
       const rpcId = msg?.id;
+      const pendingKey =
+        rpcId !== undefined && rpcId !== null
+          ? this.pendingKeyFor(rpcId)
+          : undefined;
+      const pending =
+        pendingKey !== undefined ? this.pendingRequests.get(pendingKey) : undefined;
 
-      if (rpcId !== undefined && this.pendingRequests.has(rpcId)) {
-        const pending = this.pendingRequests.get(rpcId)!;
-        this.pendingRequests.delete(rpcId);
+      if (pendingKey !== undefined && pending) {
+        this.pendingRequests.delete(pendingKey);
         const latencyMs = Date.now() - pending.timestamp;
         this.addLog({
           timestamp: Date.now(),
@@ -431,7 +436,7 @@ export class MCPClientManager extends EventEmitter {
     });
 
     const pending = new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(rpcId, {
+      this.pendingRequests.set(this.pendingKeyFor(rpcId), {
         resolve: (v: any) => resolve(v),
         reject,
         timestamp: start,
@@ -452,9 +457,9 @@ export class MCPClientManager extends EventEmitter {
           data: { jsonrpc: '2.0', id: rpcId, result: res },
           latencyMs
         });
-        const p = this.pendingRequests.get(rpcId);
+        const p = this.pendingRequests.get(this.pendingKeyFor(rpcId));
         if (p) {
-          this.pendingRequests.delete(rpcId);
+          this.pendingRequests.delete(this.pendingKeyFor(rpcId));
           p.resolve(res);
         }
       })
@@ -469,9 +474,9 @@ export class MCPClientManager extends EventEmitter {
           latencyMs,
           isError: true
         });
-        const p = this.pendingRequests.get(rpcId);
+        const p = this.pendingRequests.get(this.pendingKeyFor(rpcId));
         if (p) {
-          this.pendingRequests.delete(rpcId);
+          this.pendingRequests.delete(this.pendingKeyFor(rpcId));
           p.reject(err);
         }
       });
@@ -497,13 +502,28 @@ export class MCPClientManager extends EventEmitter {
     }
   }
 
+  /**
+   * Canonical pending-request map key for a JSON-RPC id: string form, so a
+   * string reply id still matches a numeric request id (and vice versa).
+   */
+  private pendingKeyFor(id: string | number): string {
+    return String(id);
+  }
+
   private handleIncomingRpc(msg: any) {
     const isError = Boolean(msg.error);
     const rpcId = msg.id;
 
-    if (rpcId !== undefined && this.pendingRequests.has(rpcId)) {
-      const pending = this.pendingRequests.get(rpcId)!;
-      this.pendingRequests.delete(rpcId);
+    // JSON-RPC ids may come back as a string while we sent a number (or vice
+    // versa); match on the canonical string form so replies are never lost.
+    const pendingKey =
+      rpcId !== undefined && rpcId !== null
+        ? this.pendingKeyFor(rpcId)
+        : undefined;
+    const pending = pendingKey !== undefined ? this.pendingRequests.get(pendingKey) : undefined;
+
+    if (pendingKey !== undefined && pending) {
+      this.pendingRequests.delete(pendingKey);
       const latencyMs = Date.now() - pending.timestamp;
 
       this.addLog({
@@ -555,7 +575,7 @@ export class MCPClientManager extends EventEmitter {
         data: payload
       });
 
-      this.pendingRequests.set(id, {
+      this.pendingRequests.set(this.pendingKeyFor(id), {
         resolve,
         reject,
         timestamp: Date.now(),
@@ -565,7 +585,7 @@ export class MCPClientManager extends EventEmitter {
       if (this.activeProcess && this.activeProcess.stdin?.writable) {
         this.activeProcess.stdin.write(JSON.stringify(payload) + '\n');
       } else {
-        this.pendingRequests.delete(id);
+        this.pendingRequests.delete(this.pendingKeyFor(id));
         reject(new Error('No active stdio process writable stream available.'));
       }
     });
