@@ -154,6 +154,51 @@ export class MCPClientManager extends EventEmitter {
     return run;
   }
 
+  /** Max automatic reconnect attempts after a crash. */
+  private static readonly MAX_CRASH_RETRIES = 3;
+  private crashRetryTimer: NodeJS.Timeout | null = null;
+  private crashRetryAttempt = 0;
+
+  /**
+   * Schedule an automatic reconnect after a crash with exponential backoff
+   * (1s, 2s, 4s). Gives up after MAX_CRASH_RETRIES and publishes the retry
+   * progress in the active state.
+   */
+  private scheduleCrashRetry(config: ServerConfig): void {
+    if (this.crashRetryAttempt >= MCPClientManager.MAX_CRASH_RETRIES) {
+      this.crashRetryAttempt = 0;
+      this.emit('notification', {
+        method: 'studio/retry-exhausted',
+        params: { serverId: config.id, message: 'Automatic reconnect gave up after 3 attempts' }
+      });
+      return;
+    }
+
+    this.crashRetryAttempt += 1;
+    const delayMs = 1000 * Math.pow(2, this.crashRetryAttempt - 1);
+
+    if (this.activeState) {
+      this.activeState = {
+        ...this.activeState,
+        status: 'connecting',
+        error: `Reconnecting after crash (attempt ${this.crashRetryAttempt}/${MCPClientManager.MAX_CRASH_RETRIES})...`
+      };
+      this.emit('state:changed', this.activeState);
+    }
+
+    if (this.crashRetryTimer) clearTimeout(this.crashRetryTimer);
+    this.crashRetryTimer = setTimeout(async () => {
+      this.crashRetryTimer = null;
+      try {
+        await this.connect(config.id);
+        this.crashRetryAttempt = 0;
+      } catch {
+        // connect() already published the error state; the next crash (or
+        // failure) re-enters scheduleCrashRetry through the exit handler.
+      }
+    }, delayMs);
+  }
+
   async connect(id: string): Promise<ServerState> {
     return this.enqueueConnect(() => this.performConnect(id));
   }
@@ -177,6 +222,7 @@ export class MCPClientManager extends EventEmitter {
 
     try {
       if (config.transport === 'mock') {
+        this.crashRetryAttempt = 0;
         this.activeState = {
           config,
           status: 'connected',
@@ -193,16 +239,19 @@ export class MCPClientManager extends EventEmitter {
 
       if (config.transport === 'stdio') {
         await this.connectStdio(config);
+        this.crashRetryAttempt = 0;
         return this.activeState!;
       }
 
       if (config.transport === 'sse') {
         await this.connectSse(config);
+        this.crashRetryAttempt = 0;
         return this.activeState!;
       }
 
       if (config.transport === 'streamable-http') {
         await this.connectSse(config);
+        this.crashRetryAttempt = 0;
         return this.activeState!;
       }
 
@@ -312,6 +361,11 @@ export class MCPClientManager extends EventEmitter {
             if (pending.timer) clearTimeout(pending.timer);
             pending.reject(new Error(message));
           }
+
+          // Automatic crash recovery: retry with exponential backoff, at most
+          // MAX_CRASH_RETRIES times. Each attempt is published in the state so
+          // the UI can show "reconnecting (attempt 2/3)".
+          this.scheduleCrashRetry(config);
         });
 
         // Send MCP initialize request
@@ -742,6 +796,12 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    // A manual disconnect cancels any pending automatic crash retry.
+    if (this.crashRetryTimer) {
+      clearTimeout(this.crashRetryTimer);
+      this.crashRetryTimer = null;
+    }
+    this.crashRetryAttempt = 0;
     // Null the handle first: the exit handler treats a missing active process
     // as a stale event and leaves the state transition to us.
     const proc = this.activeProcess;

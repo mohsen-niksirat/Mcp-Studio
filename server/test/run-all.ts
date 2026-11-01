@@ -14,7 +14,8 @@ const testFiles = [
   'test/id-matching.test.ts',
   'test/rpc-timeout.test.ts',
   'test/connect-race.test.ts',
-  'test/persistence.test.ts'
+  'test/persistence.test.ts',
+  'test/crash-retry.test.ts'
 ];
 
 for (const file of testFiles) {

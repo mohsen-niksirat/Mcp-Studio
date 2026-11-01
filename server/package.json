@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx test/index.test.ts && tsx test/chat-proxy.test.ts && tsx test/crash-resilience.test.ts && tsx test/id-matching.test.ts && tsx test/rpc-timeout.test.ts && tsx test/connect-race.test.ts && tsx test/persistence.test.ts",
+    "test": "tsx test/index.test.ts && tsx test/chat-proxy.test.ts && tsx test/crash-resilience.test.ts && tsx test/id-matching.test.ts && tsx test/rpc-timeout.test.ts && tsx test/connect-race.test.ts && tsx test/persistence.test.ts && tsx test/crash-retry.test.ts",
     "test:coverage": "c8 --reporter=lcov --include \"src/**\" node --import tsx test/run-all.ts",
     "typecheck": "tsc --noEmit"
   },
