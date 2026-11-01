@@ -1,6 +1,6 @@
 {
   "name": "mcp-studio-e2e",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Playwright end-to-end tests for MCP-Studio",
   "private": true,
   "scripts": {

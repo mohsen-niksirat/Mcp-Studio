@@ -5,19 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-11-01
 
 ### Added
 - **Server config persistence**: registered servers survive backend restarts
   via `~/.mcp-studio/servers.json`, written atomically (tmp + rename); the
   built-in demo server never duplicates, corrupt stores fall back to
   defaults, and `MCP_STUDIO_DISABLE_PERSISTENCE=1` opts out.
-- **Chat streaming**: OpenAI/Ollama responses stream token by token through
-  the existing secure proxy (`stream: true` passes straight through), with
-  an automatic non-streaming fallback when the upstream cannot stream.
-- **Automatic crash recovery**: after an unexpected stdio exit the manager
-  retries with exponential backoff (1s/2s/4s, max 3 attempts) and publishes
-  the attempt count in the state; manual disconnect cancels the retry.
+- **Chat streaming (OpenAI/Ollama + Gemini)**: responses stream token by
+  token through the existing secure proxy — OpenAI-compatible endpoints via
+  `stream: true` and Gemini via `streamGenerateContent?alt=sse` — with an
+  automatic non-streaming fallback when the upstream cannot stream or a
+  function call is detected.
+- **Automatic crash recovery**: after an unexpected stdio exit or a closed
+  SSE/streamable-http connection the manager retries with exponential
+  backoff (1s/2s/4s, capped at 30s per attempt, max 3 attempts) and
+  publishes the attempt count in the state; manual disconnect cancels the
+  retry.
 - **Chat history export/import**: the AI Chat Sandbox can download the full
   conversation as JSON and re-import it, complementing localStorage.
 - **Transport-aware code snippets + Go**: the snippet generator emits
@@ -25,8 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   StreamableHTTPClientTransport, raw curl with auth headers) for
   sse/streamable-http servers, and adds a Go tab.
 - **Server-side log filtering**: `GET /api/logs` accepts `direction`,
-  `method`, and `errorsOnly` query params; the TrafficView queries them and
-  windows the rendered list to the newest 200 frames.
+  `method`, `errorsOnly`, and `limit` query params; the TrafficView queries
+  them with a configurable "Last N" selector and windows the rendered list
+  to the newest 200 frames.
 - **`streamable-http` transport**: remote MCP servers over Streamable HTTP
   (the modern MCP transport) are supported alongside SSE through the
   official MCP TypeScript SDK; both share the unified traffic logging.
@@ -141,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource explorer, prompt inspector, live JSON-RPC traffic view, benchmark suite,
   config importer, in-browser web demo, and Windows desktop executable.
 
+[1.5.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mohsen-niksirat/Mcp-Studio/compare/v1.1.0...v1.2.0
