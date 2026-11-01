@@ -257,8 +257,14 @@ app.post('/api/import/apply', (req, res) => {
 // Serve frontend dist if built
 const clientDistPath = path.resolve(process.cwd(), 'client', 'dist');
 app.use(express.static(clientDistPath));
-app.get('*', (req, res, next) => {
+// Express 5 removed the '*' wildcard pattern (path-to-regexp v8); a
+// catch-all middleware is the supported SPA fallback. API and WebSocket
+// paths fall through untouched.
+app.use((req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
+    return next();
+  }
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
     return next();
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
