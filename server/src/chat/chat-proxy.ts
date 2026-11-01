@@ -37,6 +37,8 @@ interface ProxyRequestBody {
   model?: unknown;
   baseUrl?: unknown;
   payload?: unknown;
+  /** When true, Gemini is called via streamGenerateContent?alt=sse. */
+  stream?: unknown;
 }
 
 /**
@@ -98,7 +100,7 @@ export function createChatProxyRouter(fetchImpl: FetchLike = fetch): Router {
   const router = Router();
 
   router.post('/api/chat/gemini', (req, res) => {
-    const { apiKey, model, payload } = (req.body || {}) as ProxyRequestBody;
+    const { apiKey, model, payload, stream } = (req.body || {}) as ProxyRequestBody;
     if (typeof apiKey !== 'string' || !apiKey) {
       return res.status(400).json({ error: 'apiKey is required' });
     }
@@ -113,8 +115,11 @@ export function createChatProxyRouter(fetchImpl: FetchLike = fetch): Router {
     if (!/^[A-Za-z0-9._-]+$/.test(modelName)) {
       return res.status(400).json({ error: 'model must be a valid model identifier' });
     }
-    // The key travels in the x-goog-api-key header, never as a URL query param.
-    forwardUpstream(res, fetchImpl, `${GEMINI_BASE_URL}/models/${modelName}:generateContent`, {
+    // Streaming uses the SSE-flavored endpoint; the key still travels in the
+    // x-goog-api-key header, never as a URL query param.
+    const action =
+      stream === true ? `${modelName}:streamGenerateContent?alt=sse` : `${modelName}:generateContent`;
+    forwardUpstream(res, fetchImpl, `${GEMINI_BASE_URL}/models/${action}`, {
       'Content-Type': 'application/json',
       'x-goog-api-key': apiKey
     }, serializedPayload);

@@ -94,6 +94,29 @@ async function runTests() {
     console.log('✅ Gemini proxy forwards with key in header only');
   }
 
+  // 1b. Gemini streaming: stream:true targets streamGenerateContent?alt=sse
+  {
+    const { calls, fetchImpl } = makeStubFetch(200, {});
+    const { server, port } = await startServer(createChatProxyRouter(fetchImpl));
+
+    await postJson(port, '/api/chat/gemini', {
+      apiKey: SECRET_KEY,
+      model: 'gemini-2.0-flash',
+      stream: true,
+      payload: { contents: [{ role: 'user', parts: [{ text: 'hello' }] }] }
+    });
+
+    server.close();
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(
+      calls[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
+      'streaming requests must target the SSE-flavored streamGenerateContent endpoint'
+    );
+    assert(!calls[0].url.includes(SECRET_KEY), 'the key must never appear in the streaming URL');
+    console.log('✅ Gemini streaming targets streamGenerateContent?alt=sse with key in header');
+  }
+
   // 2. Gemini: missing key is rejected locally with 400 and never reaches upstream
   {
     const { calls, fetchImpl } = makeStubFetch(200, {});
