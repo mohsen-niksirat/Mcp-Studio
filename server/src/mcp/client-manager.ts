@@ -15,6 +15,7 @@ import {
   BenchmarkResult
 } from '../types.js';
 import { MockMCPServer } from './mock-server.js';
+import { ServerStore } from './server-store.js';
 
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -43,13 +44,22 @@ export class MCPClientManager extends EventEmitter {
   private stdoutBuffer = '';
   private rpcTimeoutMs: number;
   private connectQueue: Promise<unknown> = Promise.resolve();
+  private store: ServerStore | null;
 
-  constructor(options?: { rpcTimeoutMs?: number }) {
+  constructor(options?: { rpcTimeoutMs?: number; store?: ServerStore | null }) {
     super();
     const envTimeout = Number(process.env.MCP_RPC_TIMEOUT_MS);
     this.rpcTimeoutMs =
       options?.rpcTimeoutMs ??
       (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_RPC_TIMEOUT_MS);
+    // Optional persistence: pass a store (or MCP_STUDIO_DISABLE_PERSISTENCE=1
+    // in tests) to keep registered servers across backend restarts.
+    this.store =
+      options?.store !== undefined
+        ? options.store
+        : /^(1|true|yes)$/i.test(process.env.MCP_STUDIO_DISABLE_PERSISTENCE || '')
+        ? null
+        : new ServerStore();
     // Default built-in Demo Server
     const defaultMock: ServerConfig = {
       id: 'demo-mock-server',
@@ -59,6 +69,24 @@ export class MCPClientManager extends EventEmitter {
       createdAt: Date.now()
     };
     this.servers.set(defaultMock.id, defaultMock);
+    this.loadPersistedServers();
+  }
+
+  private loadPersistedServers(): void {
+    if (!this.store) return;
+    for (const config of this.store.load()) {
+      if (config.id === 'demo-mock-server') continue; // built-in always wins
+      this.servers.set(config.id, config);
+    }
+  }
+
+  private persistServers(): void {
+    if (!this.store) return;
+    try {
+      this.store.save(this.getServers());
+    } catch (err) {
+      console.warn('[MCPClientManager] Failed to persist servers:', err);
+    }
   }
 
   getServers(): ServerConfig[] {
@@ -73,6 +101,7 @@ export class MCPClientManager extends EventEmitter {
       createdAt: Date.now()
     };
     this.servers.set(id, newConfig);
+    this.persistServers();
     return newConfig;
   }
 
@@ -80,7 +109,11 @@ export class MCPClientManager extends EventEmitter {
     if (this.activeId === id) {
       this.disconnect();
     }
-    return this.servers.delete(id);
+    const removed = this.servers.delete(id);
+    if (removed) {
+      this.persistServers();
+    }
+    return removed;
   }
 
   getActiveState(): ServerState | null {
