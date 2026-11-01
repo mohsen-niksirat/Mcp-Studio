@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Server config persistence**: registered servers survive backend restarts
+  via `~/.mcp-studio/servers.json`, written atomically (tmp + rename); the
+  built-in demo server never duplicates, corrupt stores fall back to
+  defaults, and `MCP_STUDIO_DISABLE_PERSISTENCE=1` opts out.
+- **Chat streaming**: OpenAI/Ollama responses stream token by token through
+  the existing secure proxy (`stream: true` passes straight through), with
+  an automatic non-streaming fallback when the upstream cannot stream.
+- **Automatic crash recovery**: after an unexpected stdio exit the manager
+  retries with exponential backoff (1s/2s/4s, max 3 attempts) and publishes
+  the attempt count in the state; manual disconnect cancels the retry.
+- **Chat history export/import**: the AI Chat Sandbox can download the full
+  conversation as JSON and re-import it, complementing localStorage.
+- **Transport-aware code snippets + Go**: the snippet generator emits
+  remote-transport snippets (Python httpx, TypeScript
+  StreamableHTTPClientTransport, raw curl with auth headers) for
+  sse/streamable-http servers, and adds a Go tab.
+- **Server-side log filtering**: `GET /api/logs` accepts `direction`,
+  `method`, and `errorsOnly` query params; the TrafficView queries them and
+  windows the rendered list to the newest 200 frames.
+- **`streamable-http` transport**: remote MCP servers over Streamable HTTP
+  (the modern MCP transport) are supported alongside SSE through the
+  official MCP TypeScript SDK; both share the unified traffic logging.
+
 ### Fixed
 - **JSON-RPC reply id matching**: a server replying with a string id to a
   numeric request id (or vice versa) no longer strands the pending request;
@@ -37,10 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documented constant and the invalid `\-` escape inside a character class
   is removed.
 
-### Added
-- **`streamable-http` transport**: remote MCP servers over Streamable HTTP
-  (the modern MCP transport) are supported alongside SSE through the
-  official MCP TypeScript SDK; both share the unified traffic logging.
+### Changed
+- **CI**: the pipeline now also builds the server and runs the full
+  monorepo `pnpm build` so cross-workspace regressions fail before merge.
 
 ## [1.4.0] - 2026-10-31
 
