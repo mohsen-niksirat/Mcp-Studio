@@ -70,6 +70,20 @@ async function runTests() {
   assert.strictEqual(bench.successRate, 100);
   console.log(`✅ Benchmark completed: Avg Latency = ${bench.avgLatencyMs}ms, Success = ${bench.successRate}%`);
 
+  // 9b. Benchmark input clamping: invalid values must not produce NaN/Infinity
+  for (const bad of [0, -5, 1000, Number.NaN]) {
+    const clamped = await manager.runBenchmark(bad);
+    assert(
+      clamped.iterations >= 1 && clamped.iterations <= 100,
+      `iterations must be clamped into [1,100], got ${clamped.iterations} for input ${bad}`
+    );
+    assert(Number.isFinite(clamped.avgLatencyMs), `avgLatencyMs must be finite for input ${bad}`);
+    assert(Number.isFinite(clamped.minLatencyMs), `minLatencyMs must be finite for input ${bad}`);
+    assert(Number.isFinite(clamped.maxLatencyMs), `maxLatencyMs must be finite for input ${bad}`);
+    assert(Number.isFinite(clamped.successRate), `successRate must be finite for input ${bad}`);
+  }
+  console.log('✅ Benchmark clamps 0/-5/1000/NaN into [1,100] with finite stats');
+
   // 10. Disconnect
   await manager.disconnect();
   assert.strictEqual(manager.getActiveState()?.status, 'disconnected');

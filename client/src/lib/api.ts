@@ -47,11 +47,22 @@ export const api = {
 
   async addServer(config: Partial<ServerConfig>): Promise<ServerConfig> {
     if (isStandaloneWeb) {
+      const transport = config.transport || 'mock';
+      if (transport !== 'mock') {
+        throw new Error(
+          'This is the in-browser standalone demo: only the built-in mock server works here. ' +
+            'Run `npx mcp-studio` locally to connect real stdio or SSE servers.'
+        );
+      }
       const newConfig: ServerConfig = {
         id: `browser-custom-${Date.now()}`,
         name: config.name || 'Custom Server',
-        transport: config.transport || 'mock',
+        transport,
+        command: config.command,
+        args: config.args,
+        env: config.env,
         url: config.url,
+        headers: config.headers,
         createdAt: Date.now()
       };
       return newConfig;

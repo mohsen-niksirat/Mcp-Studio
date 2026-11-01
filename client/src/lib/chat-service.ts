@@ -34,6 +34,30 @@ export class ChatSandboxService {
   }
 
   // --- Provider: Mock / Heuristic Simulator (Zero Keys Required) ---
+
+  /**
+   * Heuristic intent patterns for the built-in simulator. Each entry maps a
+   * tool category to a regex tested against the lowercased user message;
+   * the first matching category with an available tool wins.
+   */
+  private static readonly MOCK_INTENT_PATTERNS: { category: 'math' | 'system' | 'users'; pattern: RegExp }[] = [
+    {
+      category: 'math',
+      // calc/math words, arithmetic operators, and common operation names.
+      // Note: '-' is listed plainly (no escape needed inside a character
+      // class when placed last) to keep the intent explicit.
+      pattern: /calc|math|power|add|\+|\*|\/|-|multiply|divide|square|\^/i
+    },
+    {
+      category: 'system',
+      pattern: /system|cpu|ram|memory|spec|hardware|os|host|platform/i
+    },
+    {
+      category: 'users',
+      pattern: /generate|mock|users|profiles|records|fake/i
+    }
+  ];
+
   private static async handleMockChat(
     userText: string,
     tools: ToolItem[],
@@ -42,72 +66,36 @@ export class ChatSandboxService {
   ): Promise<ChatMessage> {
     const lower = userText.toLowerCase();
 
-    // Check for Math
-    const mathTool = tools.find((t) => t.name.includes('calc') || t.name.includes('math'));
-    const isMath = /calc|math|power|add|\+|\*|\/|\-|multiply|divide|square|\^/i.test(lower);
+    const toolByCategory: Record<string, (t: ToolItem) => boolean> = {
+      math: (t) => t.name.includes('calc') || t.name.includes('math'),
+      system: (t) => t.name.includes('system') || t.name.includes('monitor'),
+      users: (t) => t.name.includes('user') || t.name.includes('data')
+    };
 
-    // Check for System Monitor
-    const sysTool = tools.find((t) => t.name.includes('system') || t.name.includes('monitor'));
-    const isSys = /system|cpu|ram|memory|spec|hardware|os|host|platform/i.test(lower);
+    for (const { category, pattern } of this.MOCK_INTENT_PATTERNS) {
+      if (!pattern.test(lower)) continue;
+      const tool = tools.find(toolByCategory[category]);
+      if (!tool) continue;
 
-    // Check for Mock Data
-    const userTool = tools.find((t) => t.name.includes('user') || t.name.includes('data'));
-    const isUserGen = /generate|mock|users|profiles|records|fake/i.test(lower);
-
-    if (mathTool && isMath) {
-      let op = 'multiply';
-      let a = 12;
-      let b = 8;
-
-      if (lower.includes('power') || lower.includes('^')) {
-        op = 'power';
-        a = 2;
-        b = 10;
-      } else if (lower.includes('divide') || lower.includes('/')) {
-        op = 'divide';
-        a = 100;
-        b = 4;
-      } else if (lower.includes('add') || lower.includes('+')) {
-        op = 'add';
-        a = 45;
-        b = 55;
+      if (category === 'math') {
+        return this.handleMathRequest(lower, userText, tool, assistantMsg, onProgress);
       }
-
-      // Extract numbers if present
-      const numbers = userText.match(/\d+(\.\d+)?/g);
-      if (numbers && numbers.length >= 2) {
-        a = Number(numbers[0]);
-        b = Number(numbers[1]);
+      if (category === 'system') {
+        return this.executeAndSynthesize(
+          assistantMsg,
+          tool.name,
+          { unit: 'GB', includeNetwork: true },
+          `I queried the current system metrics using the \`${tool.name}\` MCP tool.`,
+          onProgress
+        );
       }
-
-      return this.executeAndSynthesize(
-        assistantMsg,
-        mathTool.name,
-        { operation: op, a, b },
-        `I called the \`${mathTool.name}\` tool to evaluate your expression.`,
-        onProgress
-      );
-    }
-
-    if (sysTool && isSys) {
-      return this.executeAndSynthesize(
-        assistantMsg,
-        sysTool.name,
-        { unit: 'GB', includeNetwork: true },
-        `I queried the current system metrics using the \`${sysTool.name}\` MCP tool.`,
-        onProgress
-      );
-    }
-
-    if (userTool && isUserGen) {
       const countMatch = userText.match(/\d+/);
       const count = countMatch ? Number(countMatch[0]) : 4;
-
       return this.executeAndSynthesize(
         assistantMsg,
-        userTool.name,
+        tool.name,
         { count, role: 'developer' },
-        `I invoked \`${userTool.name}\` to generate ${count} mock developer records.`,
+        `I invoked \`${tool.name}\` to generate ${count} mock developer records.`,
         onProgress
       );
     }
@@ -116,6 +104,47 @@ export class ChatSandboxService {
     assistantMsg.content = `I understand you said: "${userText}".\n\nI have access to ${tools.length} MCP tools: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Ask me to calculate numbers, inspect system health, or generate test records!`;
     onProgress({ ...assistantMsg });
     return assistantMsg;
+  }
+
+  private static async handleMathRequest(
+    lower: string,
+    userText: string,
+    tool: ToolItem,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void
+  ): Promise<ChatMessage> {
+    let op = 'multiply';
+    let a = 12;
+    let b = 8;
+
+    if (lower.includes('power') || lower.includes('^')) {
+      op = 'power';
+      a = 2;
+      b = 10;
+    } else if (lower.includes('divide') || lower.includes('/')) {
+      op = 'divide';
+      a = 100;
+      b = 4;
+    } else if (lower.includes('add') || lower.includes('+')) {
+      op = 'add';
+      a = 45;
+      b = 55;
+    }
+
+    // Extract numbers if present
+    const numbers = userText.match(/\d+(\.\d+)?/g);
+    if (numbers && numbers.length >= 2) {
+      a = Number(numbers[0]);
+      b = Number(numbers[1]);
+    }
+
+    return this.executeAndSynthesize(
+      assistantMsg,
+      tool.name,
+      { operation: op, a, b },
+      `I called the \`${tool.name}\` tool to evaluate your expression.`,
+      onProgress
+    );
   }
 
   // --- Helper: Execute Tool and synthesize response ---

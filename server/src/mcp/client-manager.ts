@@ -985,9 +985,12 @@ export class MCPClientManager extends EventEmitter {
     successRate: number;
     results: BenchmarkResult[];
   }> {
+    // Clamp to a sane range: 0/negative/NaN would produce NaN averages and
+    // division by zero, and absurd values would hammer the server.
+    const safeIterations = Math.min(Math.max(Math.floor(Number(iterations) || 0), 1), 100);
     const results: BenchmarkResult[] = [];
 
-    for (let i = 0; i < iterations; i++) {
+    for (let i = 0; i < safeIterations; i++) {
       const start = Date.now();
       try {
         await this.listTools();
@@ -1012,11 +1015,13 @@ export class MCPClientManager extends EventEmitter {
     const successCount = results.filter((r) => r.success).length;
 
     return {
-      iterations,
-      avgLatencyMs: Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length),
-      minLatencyMs: Math.min(...latencies),
-      maxLatencyMs: Math.max(...latencies),
-      successRate: Math.round((successCount / iterations) * 100),
+      iterations: safeIterations,
+      avgLatencyMs: latencies.length
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0,
+      minLatencyMs: latencies.length ? Math.min(...latencies) : 0,
+      maxLatencyMs: latencies.length ? Math.max(...latencies) : 0,
+      successRate: safeIterations ? Math.round((successCount / safeIterations) * 100) : 0,
       results
     };
   }
