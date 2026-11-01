@@ -11,7 +11,7 @@ import {
   Search,
   Wrench
 } from 'lucide-react';
-import { ToolItem } from '../../types';
+import { ToolItem, ServerState } from '../../types';
 import { DynamicSchemaForm } from './DynamicSchemaForm';
 import { CodeSnippetModal } from './CodeSnippetModal';
 import { api } from '../../lib/api';
@@ -21,6 +21,7 @@ import { cn } from '../../lib/cn';
 interface ToolsViewProps {
   tools: ToolItem[];
   isLoading: boolean;
+  activeState?: ServerState | null;
 }
 
 interface ExecutionHistoryItem {
@@ -33,7 +34,7 @@ interface ExecutionHistoryItem {
   timestamp: number;
 }
 
-export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
+export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeState }) => {
   const [selectedTool, setSelectedTool] = useState<ToolItem | null>(tools[0] || null);
   const [search, setSearch] = useState('');
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -227,6 +228,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading }) => {
               onClose={() => setIsSnippetOpen(false)}
               tool={selectedTool}
               args={formValues}
+              activeState={activeState}
             />
           </div>
 
