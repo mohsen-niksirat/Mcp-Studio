@@ -266,6 +266,24 @@ export class ChatSandboxService {
     assistantMsg.content = 'Thinking with Gemini...';
     onProgress({ ...assistantMsg });
 
+    // Streaming first: the proxy passes `alt=sse` payloads straight through,
+    // so we render text chunks token by token. Returns null when the stream
+    // cannot be used (function call detected, no text, or a mid-stream
+    // failure) and the classic non-streaming request below takes over.
+    const streamRes = await this.postToChatProxy('/api/chat/gemini', {
+      apiKey: config.apiKey,
+      model: modelName,
+      payload: { ...reqBody, generationConfig: { ...reqBody.generationConfig } },
+      stream: true
+    });
+
+    if (streamRes.ok && streamRes.body) {
+      const streamed = await this.consumeGeminiStream(streamRes, assistantMsg, onProgress);
+      if (streamed !== null) {
+        return streamed;
+      }
+    }
+
     // Key travels in the request body to our server-side proxy, never in a URL.
     const res = await this.postToChatProxy('/api/chat/gemini', {
       apiKey: config.apiKey,
@@ -502,6 +520,101 @@ export class ChatSandboxService {
     }
 
     if (sawToolCall || !sawTextDelta) {
+      return null;
+    }
+    return assistantMsg;
+  }
+
+  /**
+   * Consume a Gemini SSE stream (`streamGenerateContent?alt=sse` frames
+   * relayed by the proxy). Each `data:` frame carries a partial
+   * GenerateContentResponse whose text parts are appended token by token.
+   * Returns null — triggering the non-streaming fallback — when the stream
+   * is not SSE, when a function call is detected (the classic tool-call path
+   * owns those), or when no text was produced.
+   */
+  private static async consumeGeminiStream(
+    res: Response,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void
+  ): Promise<ChatMessage | null> {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      return null;
+    }
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let sawText = false;
+    let sawFunctionCall = false;
+    assistantMsg.content = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const dataLines = frame
+            .split('\n')
+            .filter((l) => l.startsWith('data:'))
+            .map((l) => l.slice(5).trim());
+          for (const data of dataLines) {
+            if (!data) continue;
+            let parsed: any;
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
+            const parts = parsed.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
+              if (part.functionCall) {
+                sawFunctionCall = true;
+              }
+              if (part.text) {
+                sawText = true;
+                assistantMsg.content += part.text;
+                onProgress({ ...assistantMsg });
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Mid-stream failure: fall back to the non-streaming request.
+      return null;
+    }
+
+    // Flush any final frame that arrived without a trailing blank line.
+    if (buffer.trim()) {
+      for (const data of buffer
+        .split('\n')
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).trim())) {
+        if (!data) continue;
+        try {
+          const parsed = JSON.parse(data);
+          const parts = parsed.candidates?.[0]?.content?.parts || [];
+          for (const part of parts) {
+            if (part.functionCall) sawFunctionCall = true;
+            if (part.text) {
+              sawText = true;
+              assistantMsg.content += part.text;
+              onProgress({ ...assistantMsg });
+            }
+          }
+        } catch {
+          // ignore malformed trailing frame
+        }
+      }
+    }
+
+    if (sawFunctionCall || !sawText) {
       return null;
     }
     return assistantMsg;

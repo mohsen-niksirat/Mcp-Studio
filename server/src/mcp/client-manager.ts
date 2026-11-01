@@ -156,13 +156,16 @@ export class MCPClientManager extends EventEmitter {
 
   /** Max automatic reconnect attempts after a crash. */
   private static readonly MAX_CRASH_RETRIES = 3;
+  /** Upper bound for a single backoff delay. */
+  private static readonly MAX_CRASH_BACKOFF_MS = 30_000;
   private crashRetryTimer: NodeJS.Timeout | null = null;
   private crashRetryAttempt = 0;
 
   /**
    * Schedule an automatic reconnect after a crash with exponential backoff
-   * (1s, 2s, 4s). Gives up after MAX_CRASH_RETRIES and publishes the retry
-   * progress in the active state.
+   * (1s, 2s, 4s, ... capped at 30s). Gives up after MAX_CRASH_RETRIES and
+   * publishes the retry progress in the active state. Applies to both stdio
+   * crashes and remote (SSE / streamable-http) connection drops.
    */
   private scheduleCrashRetry(config: ServerConfig): void {
     if (this.crashRetryAttempt >= MCPClientManager.MAX_CRASH_RETRIES) {
@@ -175,7 +178,10 @@ export class MCPClientManager extends EventEmitter {
     }
 
     this.crashRetryAttempt += 1;
-    const delayMs = 1000 * Math.pow(2, this.crashRetryAttempt - 1);
+    const delayMs = Math.min(
+      1000 * Math.pow(2, this.crashRetryAttempt - 1),
+      MCPClientManager.MAX_CRASH_BACKOFF_MS
+    );
 
     if (this.activeState) {
       this.activeState = {
@@ -524,6 +530,8 @@ export class MCPClientManager extends EventEmitter {
         if (pending.timer) clearTimeout(pending.timer);
         pending.reject(new Error(message));
       }
+      // Remote drops get the same automatic recovery as stdio crashes.
+      this.scheduleCrashRetry(config);
     };
 
     const client = new Client(

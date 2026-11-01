@@ -35,6 +35,8 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
   const [copied, setCopied] = useState(false);
   const [serverLogs, setServerLogs] = useState<JsonRpcMessageLog[] | null>(null);
   const [isFetching, setIsFetching] = useState(false);
+  /** How many frames the server-side query should return. */
+  const [logLimit, setLogLimit] = useState(500);
 
   // Follow the newest frame unless the user pinned a selection or paused.
   React.useEffect(() => {
@@ -58,7 +60,7 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     let cancelled = false;
     setIsFetching(true);
     api
-      .getLogs(500, {
+      .getLogs(logLimit, {
         direction: directionFilter === 'all' ? undefined : directionFilter,
         method: search || undefined,
         errorsOnly: errorOnly
@@ -75,7 +77,7 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     return () => {
       cancelled = true;
     };
-  }, [directionFilter, search, errorOnly, logs.length]);
+  }, [directionFilter, search, errorOnly, logLimit, logs.length]);
 
   const baseLogs = serverLogs ?? logs;
 
@@ -142,21 +144,38 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
           </div>
 
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center bg-surface-900 border border-surface-800 rounded-md p-0.5 gap-0.5">
-              {(['all', 'outgoing', 'incoming'] as const).map((dir) => (
-                <button
-                  key={dir}
-                  onClick={() => setDirectionFilter(dir)}
-                  className={cn(
-                    'px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors capitalize',
-                    directionFilter === dir
-                      ? 'bg-surface-800 text-slate-200'
-                      : 'text-slate-400 hover:text-slate-200'
-                  )}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-surface-900 border border-surface-800 rounded-md p-0.5 gap-0.5">
+                {(['all', 'outgoing', 'incoming'] as const).map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => setDirectionFilter(dir)}
+                    className={cn(
+                      'px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors capitalize',
+                      directionFilter === dir
+                        ? 'bg-surface-800 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    )}
+                  >
+                    {dir === 'all' ? 'All' : dir === 'outgoing' ? 'Req' : 'Res'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-surface-900 border border-surface-800 rounded-md px-2 py-1 text-[11px] text-slate-400">
+                <span>Last</span>
+                <select
+                  value={logLimit}
+                  onChange={(e) => setLogLimit(Number(e.target.value))}
+                  aria-label="Number of log frames to fetch"
+                  className="bg-transparent text-brand-300 font-mono focus:outline-none cursor-pointer"
                 >
-                  {dir === 'all' ? 'All' : dir === 'outgoing' ? 'Req' : 'Res'}
-                </button>
-              ))}
+                  <option value={100} className="bg-surface-900">100</option>
+                  <option value={200} className="bg-surface-900">200</option>
+                  <option value={500} className="bg-surface-900">500</option>
+                  <option value={1000} className="bg-surface-900">1000</option>
+                </select>
+              </div>
             </div>
 
             <label className="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">

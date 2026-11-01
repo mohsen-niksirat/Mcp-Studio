@@ -118,8 +118,10 @@ describe('ChatSandboxService.sendUserMessage (gemini provider)', () => {
 
     const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, vi.fn());
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    // First call: streaming attempt; the mock has no SSE body so the service
+    // falls back to the classic non-streaming request (second call).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchMock.mock.calls[1];
     expect(String(url)).toBe('/api/chat/gemini');
     expect(String(url)).not.toContain('secret-gemini-key');
     const body = JSON.parse(init.body);
@@ -127,6 +129,77 @@ describe('ChatSandboxService.sendUserMessage (gemini provider)', () => {
     expect(body.model).toBe('gemini-2.0-flash');
     expect(body.payload.contents).toEqual([{ role: 'user', parts: [{ text: 'hi' }] }]);
     expect(msg.content).toBe('Hello!');
+  });
+
+  it('streams Gemini responses token by token when the proxy returns SSE', async () => {
+    const sseBody = [
+      'data: {"candidates":[{"content":{"parts":[{"text":"Hel"}]}}]}',
+      '',
+      'data: {"candidates":[{"content":{"parts":[{"text":"lo!"}]}}]}',
+      ''
+    ].join('\n');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: (n: string) => (n === 'content-type' ? 'text/event-stream' : null) },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(sseBody));
+          controller.close();
+        }
+      })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = {
+      provider: 'gemini',
+      apiKey: 'secret-gemini-key',
+      model: 'gemini-2.0-flash'
+    };
+    const onProgress = vi.fn();
+
+    const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, onProgress);
+
+    expect(msg.content).toBe('Hello!');
+    expect(onProgress).toHaveBeenCalled();
+    // Only the streaming call should happen (no fallback).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body).stream).toBe(true);
+  });
+
+  it('falls back to non-streaming Gemini when the stream contains a function call', async () => {
+    const sseBody =
+      'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"math_calculator","args":{}}}]}}]}\n\n';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: (n: string) => (n === 'content-type' ? 'text/event-stream' : null) },
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(sseBody));
+            controller.close();
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: 'Plain answer' }] } }]
+        })
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = {
+      provider: 'gemini',
+      apiKey: 'secret-gemini-key',
+      model: 'gemini-2.0-flash'
+    };
+
+    const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, vi.fn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(msg.content).toBe('Plain answer');
   });
 });
 
