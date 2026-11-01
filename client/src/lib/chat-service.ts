@@ -385,6 +385,31 @@ export class ChatSandboxService {
     onProgress({ ...assistantMsg });
 
     // Key travels in the request body to our server-side proxy, never in a URL.
+    // Streaming first: the proxy passes `stream: true` through and pipes the
+    // SSE frames back; we render token by token. Any failure falls back to the
+    // non-streaming request below.
+    const streamBody = {
+      apiKey: config.apiKey,
+      baseUrl,
+      payload: {
+        model,
+        messages,
+        tools: formattedTools.length > 0 ? formattedTools : undefined,
+        temperature: config.temperature ?? 0.7,
+        stream: true
+      }
+    };
+
+    const streamRes = await this.postToChatProxy('/api/chat/openai', streamBody);
+    if (streamRes.ok && streamRes.body) {
+      const streamed = await this.consumeOpenAiStream(streamRes, assistantMsg, onProgress);
+      if (streamed !== null) {
+        return streamed;
+      }
+    }
+
+    // Fallback: non-streaming request (streaming unsupported upstream, tool
+    // calls pending, or the stream failed mid-flight).
     const res = await this.postToChatProxy('/api/chat/openai', {
       apiKey: config.apiKey,
       baseUrl,
@@ -405,58 +430,142 @@ export class ChatSandboxService {
     const message = choice?.message;
 
     if (message?.tool_calls?.length > 0) {
-      const tc = message.tool_calls[0];
-      const toolName = tc.function.name;
-      let args = {};
-      try {
-        args = JSON.parse(tc.function.arguments);
-      } catch (e) {
-        args = {};
-      }
+      return this.handleOpenAiToolCalls(message, messages, model, config, assistantMsg, onProgress, baseUrl);
+    }
 
-      const toolCall: ChatToolCall = {
-        id: tc.id || `call-${Date.now()}`,
-        name: toolName,
-        args,
-        status: 'calling'
-      };
-      assistantMsg.toolCalls = [toolCall];
-      assistantMsg.content = `Calling tool: \`${toolName}\`...`;
-      onProgress({ ...assistantMsg });
+    assistantMsg.content = message?.content || 'No text response received.';
+    onProgress({ ...assistantMsg });
+    return assistantMsg;
+  }
 
-      try {
-        const toolResult = await api.callTool(toolName, args);
-        toolCall.status = 'success';
-        toolCall.result = toolResult;
+  /**
+   * Consume an OpenAI-compatible SSE stream from the proxy, appending deltas
+   * to the assistant message token by token. Returns the finished message,
+   * or null when the stream cannot be used (non-SSE content type, tool-call
+   * deltas present, or an empty stream) so the caller can fall back to the
+   * non-streaming request.
+   */
+  private static async consumeOpenAiStream(
+    res: Response,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void
+  ): Promise<ChatMessage | null> {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      return null;
+    }
 
-        const outputStr = toolResult.content?.[0]?.text || JSON.stringify(toolResult.structuredData || toolResult);
-        messages.push(message);
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: outputStr
-        });
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let sawTextDelta = false;
+    let sawToolCall = false;
+    assistantMsg.content = '';
 
-        // Second turn
-        const secondRes = await this.postToChatProxy('/api/chat/openai', {
-          apiKey: config.apiKey,
-          baseUrl,
-          payload: { model, messages }
-        });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-        if (secondRes.ok) {
-          const secondData = await secondRes.json();
-          assistantMsg.content = secondData.choices?.[0]?.message?.content || outputStr;
-        } else {
-          assistantMsg.content = outputStr;
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const dataLines = frame
+            .split('\n')
+            .filter((l) => l.startsWith('data:'))
+            .map((l) => l.slice(5).trim());
+          for (const data of dataLines) {
+            if (data === '[DONE]') continue;
+            let parsed: any;
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
+            const delta = parsed.choices?.[0]?.delta;
+            if (!delta) continue;
+            if (delta.tool_calls) {
+              sawToolCall = true;
+            }
+            if (delta.content) {
+              sawTextDelta = true;
+              assistantMsg.content += delta.content;
+              onProgress({ ...assistantMsg });
+            }
+          }
         }
-      } catch (err: any) {
-        toolCall.status = 'error';
-        toolCall.error = err.message;
-        assistantMsg.content = `Tool execution failed: ${err.message}`;
       }
-    } else {
-      assistantMsg.content = message?.content || 'No text response received.';
+    } catch {
+      // Mid-stream failure: fall back to the non-streaming request.
+      return null;
+    }
+
+    if (sawToolCall || !sawTextDelta) {
+      return null;
+    }
+    return assistantMsg;
+  }
+
+  private static async handleOpenAiToolCalls(
+    message: any,
+    messages: any[],
+    model: string,
+    config: ChatConfig,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void,
+    baseUrl?: string
+  ): Promise<ChatMessage> {
+    const tc = message.tool_calls[0];
+    const toolName = tc.function.name;
+    let args = {};
+    try {
+      args = JSON.parse(tc.function.arguments);
+    } catch {
+      args = {};
+    }
+
+    const toolCall: ChatToolCall = {
+      id: tc.id || `call-${Date.now()}`,
+      name: toolName,
+      args,
+      status: 'calling'
+    };
+    assistantMsg.toolCalls = [toolCall];
+    assistantMsg.content = `Calling tool: \`${toolName}\`...`;
+    onProgress({ ...assistantMsg });
+
+    try {
+      const toolResult = await api.callTool(toolName, args);
+      toolCall.status = 'success';
+      toolCall.result = toolResult;
+
+      const outputStr =
+        toolResult.content?.[0]?.text || JSON.stringify(toolResult.structuredData || toolResult);
+      messages.push(message);
+      messages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: outputStr
+      });
+
+      // Second turn
+      const secondRes = await this.postToChatProxy('/api/chat/openai', {
+        apiKey: config.apiKey,
+        baseUrl,
+        payload: { model, messages }
+      });
+
+      if (secondRes.ok) {
+        const secondData = await secondRes.json();
+        assistantMsg.content = secondData.choices?.[0]?.message?.content || outputStr;
+      } else {
+        assistantMsg.content = outputStr;
+      }
+    } catch (err: any) {
+      toolCall.status = 'error';
+      toolCall.error = err.message;
+      assistantMsg.content = `Tool execution failed: ${err.message}`;
     }
 
     onProgress({ ...assistantMsg });
