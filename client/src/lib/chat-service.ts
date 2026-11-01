@@ -34,6 +34,30 @@ export class ChatSandboxService {
   }
 
   // --- Provider: Mock / Heuristic Simulator (Zero Keys Required) ---
+
+  /**
+   * Heuristic intent patterns for the built-in simulator. Each entry maps a
+   * tool category to a regex tested against the lowercased user message;
+   * the first matching category with an available tool wins.
+   */
+  private static readonly MOCK_INTENT_PATTERNS: { category: 'math' | 'system' | 'users'; pattern: RegExp }[] = [
+    {
+      category: 'math',
+      // calc/math words, arithmetic operators, and common operation names.
+      // Note: '-' is listed plainly (no escape needed inside a character
+      // class when placed last) to keep the intent explicit.
+      pattern: /calc|math|power|add|\+|\*|\/|-|multiply|divide|square|\^/i
+    },
+    {
+      category: 'system',
+      pattern: /system|cpu|ram|memory|spec|hardware|os|host|platform/i
+    },
+    {
+      category: 'users',
+      pattern: /generate|mock|users|profiles|records|fake/i
+    }
+  ];
+
   private static async handleMockChat(
     userText: string,
     tools: ToolItem[],
@@ -42,72 +66,36 @@ export class ChatSandboxService {
   ): Promise<ChatMessage> {
     const lower = userText.toLowerCase();
 
-    // Check for Math
-    const mathTool = tools.find((t) => t.name.includes('calc') || t.name.includes('math'));
-    const isMath = /calc|math|power|add|\+|\*|\/|\-|multiply|divide|square|\^/i.test(lower);
+    const toolByCategory: Record<string, (t: ToolItem) => boolean> = {
+      math: (t) => t.name.includes('calc') || t.name.includes('math'),
+      system: (t) => t.name.includes('system') || t.name.includes('monitor'),
+      users: (t) => t.name.includes('user') || t.name.includes('data')
+    };
 
-    // Check for System Monitor
-    const sysTool = tools.find((t) => t.name.includes('system') || t.name.includes('monitor'));
-    const isSys = /system|cpu|ram|memory|spec|hardware|os|host|platform/i.test(lower);
+    for (const { category, pattern } of this.MOCK_INTENT_PATTERNS) {
+      if (!pattern.test(lower)) continue;
+      const tool = tools.find(toolByCategory[category]);
+      if (!tool) continue;
 
-    // Check for Mock Data
-    const userTool = tools.find((t) => t.name.includes('user') || t.name.includes('data'));
-    const isUserGen = /generate|mock|users|profiles|records|fake/i.test(lower);
-
-    if (mathTool && isMath) {
-      let op = 'multiply';
-      let a = 12;
-      let b = 8;
-
-      if (lower.includes('power') || lower.includes('^')) {
-        op = 'power';
-        a = 2;
-        b = 10;
-      } else if (lower.includes('divide') || lower.includes('/')) {
-        op = 'divide';
-        a = 100;
-        b = 4;
-      } else if (lower.includes('add') || lower.includes('+')) {
-        op = 'add';
-        a = 45;
-        b = 55;
+      if (category === 'math') {
+        return this.handleMathRequest(lower, userText, tool, assistantMsg, onProgress);
       }
-
-      // Extract numbers if present
-      const numbers = userText.match(/\d+(\.\d+)?/g);
-      if (numbers && numbers.length >= 2) {
-        a = Number(numbers[0]);
-        b = Number(numbers[1]);
+      if (category === 'system') {
+        return this.executeAndSynthesize(
+          assistantMsg,
+          tool.name,
+          { unit: 'GB', includeNetwork: true },
+          `I queried the current system metrics using the \`${tool.name}\` MCP tool.`,
+          onProgress
+        );
       }
-
-      return this.executeAndSynthesize(
-        assistantMsg,
-        mathTool.name,
-        { operation: op, a, b },
-        `I called the \`${mathTool.name}\` tool to evaluate your expression.`,
-        onProgress
-      );
-    }
-
-    if (sysTool && isSys) {
-      return this.executeAndSynthesize(
-        assistantMsg,
-        sysTool.name,
-        { unit: 'GB', includeNetwork: true },
-        `I queried the current system metrics using the \`${sysTool.name}\` MCP tool.`,
-        onProgress
-      );
-    }
-
-    if (userTool && isUserGen) {
       const countMatch = userText.match(/\d+/);
       const count = countMatch ? Number(countMatch[0]) : 4;
-
       return this.executeAndSynthesize(
         assistantMsg,
-        userTool.name,
+        tool.name,
         { count, role: 'developer' },
-        `I invoked \`${userTool.name}\` to generate ${count} mock developer records.`,
+        `I invoked \`${tool.name}\` to generate ${count} mock developer records.`,
         onProgress
       );
     }
@@ -116,6 +104,47 @@ export class ChatSandboxService {
     assistantMsg.content = `I understand you said: "${userText}".\n\nI have access to ${tools.length} MCP tools: ${tools.map((t) => `\`${t.name}\``).join(', ')}. Ask me to calculate numbers, inspect system health, or generate test records!`;
     onProgress({ ...assistantMsg });
     return assistantMsg;
+  }
+
+  private static async handleMathRequest(
+    lower: string,
+    userText: string,
+    tool: ToolItem,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void
+  ): Promise<ChatMessage> {
+    let op = 'multiply';
+    let a = 12;
+    let b = 8;
+
+    if (lower.includes('power') || lower.includes('^')) {
+      op = 'power';
+      a = 2;
+      b = 10;
+    } else if (lower.includes('divide') || lower.includes('/')) {
+      op = 'divide';
+      a = 100;
+      b = 4;
+    } else if (lower.includes('add') || lower.includes('+')) {
+      op = 'add';
+      a = 45;
+      b = 55;
+    }
+
+    // Extract numbers if present
+    const numbers = userText.match(/\d+(\.\d+)?/g);
+    if (numbers && numbers.length >= 2) {
+      a = Number(numbers[0]);
+      b = Number(numbers[1]);
+    }
+
+    return this.executeAndSynthesize(
+      assistantMsg,
+      tool.name,
+      { operation: op, a, b },
+      `I called the \`${tool.name}\` tool to evaluate your expression.`,
+      onProgress
+    );
   }
 
   // --- Helper: Execute Tool and synthesize response ---
@@ -356,6 +385,31 @@ export class ChatSandboxService {
     onProgress({ ...assistantMsg });
 
     // Key travels in the request body to our server-side proxy, never in a URL.
+    // Streaming first: the proxy passes `stream: true` through and pipes the
+    // SSE frames back; we render token by token. Any failure falls back to the
+    // non-streaming request below.
+    const streamBody = {
+      apiKey: config.apiKey,
+      baseUrl,
+      payload: {
+        model,
+        messages,
+        tools: formattedTools.length > 0 ? formattedTools : undefined,
+        temperature: config.temperature ?? 0.7,
+        stream: true
+      }
+    };
+
+    const streamRes = await this.postToChatProxy('/api/chat/openai', streamBody);
+    if (streamRes.ok && streamRes.body) {
+      const streamed = await this.consumeOpenAiStream(streamRes, assistantMsg, onProgress);
+      if (streamed !== null) {
+        return streamed;
+      }
+    }
+
+    // Fallback: non-streaming request (streaming unsupported upstream, tool
+    // calls pending, or the stream failed mid-flight).
     const res = await this.postToChatProxy('/api/chat/openai', {
       apiKey: config.apiKey,
       baseUrl,
@@ -376,58 +430,142 @@ export class ChatSandboxService {
     const message = choice?.message;
 
     if (message?.tool_calls?.length > 0) {
-      const tc = message.tool_calls[0];
-      const toolName = tc.function.name;
-      let args = {};
-      try {
-        args = JSON.parse(tc.function.arguments);
-      } catch (e) {
-        args = {};
-      }
+      return this.handleOpenAiToolCalls(message, messages, model, config, assistantMsg, onProgress, baseUrl);
+    }
 
-      const toolCall: ChatToolCall = {
-        id: tc.id || `call-${Date.now()}`,
-        name: toolName,
-        args,
-        status: 'calling'
-      };
-      assistantMsg.toolCalls = [toolCall];
-      assistantMsg.content = `Calling tool: \`${toolName}\`...`;
-      onProgress({ ...assistantMsg });
+    assistantMsg.content = message?.content || 'No text response received.';
+    onProgress({ ...assistantMsg });
+    return assistantMsg;
+  }
 
-      try {
-        const toolResult = await api.callTool(toolName, args);
-        toolCall.status = 'success';
-        toolCall.result = toolResult;
+  /**
+   * Consume an OpenAI-compatible SSE stream from the proxy, appending deltas
+   * to the assistant message token by token. Returns the finished message,
+   * or null when the stream cannot be used (non-SSE content type, tool-call
+   * deltas present, or an empty stream) so the caller can fall back to the
+   * non-streaming request.
+   */
+  private static async consumeOpenAiStream(
+    res: Response,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void
+  ): Promise<ChatMessage | null> {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      return null;
+    }
 
-        const outputStr = toolResult.content?.[0]?.text || JSON.stringify(toolResult.structuredData || toolResult);
-        messages.push(message);
-        messages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: outputStr
-        });
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let sawTextDelta = false;
+    let sawToolCall = false;
+    assistantMsg.content = '';
 
-        // Second turn
-        const secondRes = await this.postToChatProxy('/api/chat/openai', {
-          apiKey: config.apiKey,
-          baseUrl,
-          payload: { model, messages }
-        });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-        if (secondRes.ok) {
-          const secondData = await secondRes.json();
-          assistantMsg.content = secondData.choices?.[0]?.message?.content || outputStr;
-        } else {
-          assistantMsg.content = outputStr;
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          const dataLines = frame
+            .split('\n')
+            .filter((l) => l.startsWith('data:'))
+            .map((l) => l.slice(5).trim());
+          for (const data of dataLines) {
+            if (data === '[DONE]') continue;
+            let parsed: any;
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
+            const delta = parsed.choices?.[0]?.delta;
+            if (!delta) continue;
+            if (delta.tool_calls) {
+              sawToolCall = true;
+            }
+            if (delta.content) {
+              sawTextDelta = true;
+              assistantMsg.content += delta.content;
+              onProgress({ ...assistantMsg });
+            }
+          }
         }
-      } catch (err: any) {
-        toolCall.status = 'error';
-        toolCall.error = err.message;
-        assistantMsg.content = `Tool execution failed: ${err.message}`;
       }
-    } else {
-      assistantMsg.content = message?.content || 'No text response received.';
+    } catch {
+      // Mid-stream failure: fall back to the non-streaming request.
+      return null;
+    }
+
+    if (sawToolCall || !sawTextDelta) {
+      return null;
+    }
+    return assistantMsg;
+  }
+
+  private static async handleOpenAiToolCalls(
+    message: any,
+    messages: any[],
+    model: string,
+    config: ChatConfig,
+    assistantMsg: ChatMessage,
+    onProgress: (msg: ChatMessage) => void,
+    baseUrl?: string
+  ): Promise<ChatMessage> {
+    const tc = message.tool_calls[0];
+    const toolName = tc.function.name;
+    let args = {};
+    try {
+      args = JSON.parse(tc.function.arguments);
+    } catch {
+      args = {};
+    }
+
+    const toolCall: ChatToolCall = {
+      id: tc.id || `call-${Date.now()}`,
+      name: toolName,
+      args,
+      status: 'calling'
+    };
+    assistantMsg.toolCalls = [toolCall];
+    assistantMsg.content = `Calling tool: \`${toolName}\`...`;
+    onProgress({ ...assistantMsg });
+
+    try {
+      const toolResult = await api.callTool(toolName, args);
+      toolCall.status = 'success';
+      toolCall.result = toolResult;
+
+      const outputStr =
+        toolResult.content?.[0]?.text || JSON.stringify(toolResult.structuredData || toolResult);
+      messages.push(message);
+      messages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: outputStr
+      });
+
+      // Second turn
+      const secondRes = await this.postToChatProxy('/api/chat/openai', {
+        apiKey: config.apiKey,
+        baseUrl,
+        payload: { model, messages }
+      });
+
+      if (secondRes.ok) {
+        const secondData = await secondRes.json();
+        assistantMsg.content = secondData.choices?.[0]?.message?.content || outputStr;
+      } else {
+        assistantMsg.content = outputStr;
+      }
+    } catch (err: any) {
+      toolCall.status = 'error';
+      toolCall.error = err.message;
+      assistantMsg.content = `Tool execution failed: ${err.message}`;
     }
 
     onProgress({ ...assistantMsg });

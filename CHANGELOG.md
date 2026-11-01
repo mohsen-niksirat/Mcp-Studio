@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Server config persistence**: registered servers survive backend restarts
+  via `~/.mcp-studio/servers.json`, written atomically (tmp + rename); the
+  built-in demo server never duplicates, corrupt stores fall back to
+  defaults, and `MCP_STUDIO_DISABLE_PERSISTENCE=1` opts out.
+- **Chat streaming**: OpenAI/Ollama responses stream token by token through
+  the existing secure proxy (`stream: true` passes straight through), with
+  an automatic non-streaming fallback when the upstream cannot stream.
+- **Automatic crash recovery**: after an unexpected stdio exit the manager
+  retries with exponential backoff (1s/2s/4s, max 3 attempts) and publishes
+  the attempt count in the state; manual disconnect cancels the retry.
+- **Chat history export/import**: the AI Chat Sandbox can download the full
+  conversation as JSON and re-import it, complementing localStorage.
+- **Transport-aware code snippets + Go**: the snippet generator emits
+  remote-transport snippets (Python httpx, TypeScript
+  StreamableHTTPClientTransport, raw curl with auth headers) for
+  sse/streamable-http servers, and adds a Go tab.
+- **Server-side log filtering**: `GET /api/logs` accepts `direction`,
+  `method`, and `errorsOnly` query params; the TrafficView queries them and
+  windows the rendered list to the newest 200 frames.
+- **`streamable-http` transport**: remote MCP servers over Streamable HTTP
+  (the modern MCP transport) are supported alongside SSE through the
+  official MCP TypeScript SDK; both share the unified traffic logging.
+
+### Fixed
+- **JSON-RPC reply id matching**: a server replying with a string id to a
+  numeric request id (or vice versa) no longer strands the pending request;
+  matching is done on the canonical string form of the id.
+- **JSON-RPC request timeout**: every RPC now carries a 10s timeout by
+  default (configurable via `MCP_RPC_TIMEOUT_MS` or the constructor), so a
+  silent stdio server can no longer hang `connect()` forever; timeouts
+  reject with an explicit "request timed out" error and are logged.
+- **connect/disconnect race**: concurrent `connect()` calls are serialized
+  through an internal queue; a failed connect (spawn error, initialize
+  failure, timeout) now releases the active slot so the next connect works
+  without a server restart.
+- **Express 5 migration**: the removed `app.get('*')` wildcard is replaced
+  by a catch-all middleware (API/WS paths excluded, GET/HEAD only) and
+  `express` is now declared at `^5.1.0` to match the code.
+- **Chat proxy hardening**: upstream calls carry a 60s abort timeout
+  (surfacing as 504); OpenAI `baseUrl` targets resolving to private /
+  loopback / link-local addresses are rejected by default with
+  `ALLOW_PRIVATE_BASE_URL=1` as the escape hatch; `apiKey` (512 chars) and
+  payload (4 MB) size caps are enforced before any upstream call.
+- **Benchmark input clamping**: `runBenchmark` clamps iterations into
+  [1, 100], so `0`/negative/NaN inputs can no longer produce NaN or
+  Infinity statistics.
+- **Standalone web `addServer`**: keeps `command`/`args`/`env`/`url`/
+  `headers` on the created config and rejects non-mock transports with a
+  clear "in-browser standalone demo" message.
+- **Mock-chat regex hygiene**: intent patterns are collected into a
+  documented constant and the invalid `\-` escape inside a character class
+  is removed.
+
+### Changed
+- **CI**: the pipeline now also builds the server and runs the full
+  monorepo `pnpm build` so cross-workspace regressions fail before merge.
+
 ## [1.4.0] - 2026-10-31
 
 ### Added

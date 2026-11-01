@@ -141,8 +141,10 @@ async function runTests() {
     console.log('✅ OpenAI proxy forwards with Bearer header only');
   }
 
-  // 4. OpenAI: honours a custom baseUrl (Ollama-style endpoints)
+  // 4. OpenAI: honours a custom public baseUrl, and allows private ones only
+  // when ALLOW_PRIVATE_BASE_URL is set (Ollama-style local gateways).
   {
+    process.env.ALLOW_PRIVATE_BASE_URL = '1';
     const { calls, fetchImpl } = makeStubFetch(200, { choices: [] });
     const { server, port } = await startServer(createChatProxyRouter(fetchImpl));
 
@@ -152,9 +154,11 @@ async function runTests() {
     });
 
     server.close();
+    delete process.env.ALLOW_PRIVATE_BASE_URL;
+    assert.strictEqual(calls.length, 1, 'the request should be forwarded');
     assert.strictEqual(calls[0].url, 'http://localhost:11434/v1/chat/completions');
     assert.strictEqual(calls[0].init.headers?.['Authorization'], undefined, 'no Authorization header without a key');
-    console.log('✅ OpenAI proxy honours custom baseUrl and optional key');
+    console.log('✅ OpenAI proxy honours custom baseUrl and optional key (private allowed via env)');
   }
 
   // 5. Upstream failure status is propagated to the client
@@ -222,6 +226,86 @@ async function runTests() {
     assert.strictEqual(status, 400, 'crafted model identifiers should be rejected with 400');
     assert.strictEqual(calls.length, 0, 'nothing should be forwarded for an invalid model');
     console.log('✅ Invalid model identifiers are rejected before reaching the upstream URL');
+  }
+
+  // 8. Oversized apiKey / payload are rejected before any upstream call
+  {
+    const { calls, fetchImpl } = makeStubFetch(200, {});
+    const { server, port } = await startServer(createChatProxyRouter(fetchImpl));
+
+    const bigKey = await postJson(port, '/api/chat/gemini', {
+      apiKey: 'k'.repeat(600),
+      payload: {}
+    });
+    assert.strictEqual(bigKey.status, 400, 'oversized apiKey must be rejected with 400');
+
+    const bigPayload = await postJson(port, '/api/chat/gemini', {
+      apiKey: SECRET_KEY,
+      payload: { blob: 'x'.repeat(5 * 1024 * 1024) }
+    });
+    assert.strictEqual(bigPayload.status, 413, 'oversized payload must be rejected with 413');
+
+    const openaiBigKey = await postJson(port, '/api/chat/openai', {
+      apiKey: 'k'.repeat(600),
+      payload: {}
+    });
+    assert.strictEqual(openaiBigKey.status, 400, 'openai oversized apiKey must be rejected');
+
+    server.close();
+    assert.strictEqual(calls.length, 0, 'nothing should be forwarded for oversized requests');
+    console.log('✅ Oversized apiKey (400) and payload (413) rejected before upstream');
+  }
+
+  // 9. baseUrl resolving to a private address is blocked by default
+  {
+    const { calls, fetchImpl } = makeStubFetch(200, {});
+    const { server, port } = await startServer(createChatProxyRouter(fetchImpl));
+
+    const loopback = await postJson(port, '/api/chat/openai', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      payload: {}
+    });
+    assert.strictEqual(loopback.status, 400, 'loopback baseUrl must be blocked by default');
+    assert(
+      /private\/internal/.test(loopback.json.error || ''),
+      'error should explain the private-address policy'
+    );
+
+    const rfc1918 = await postJson(port, '/api/chat/openai', {
+      baseUrl: 'http://10.0.0.5/v1',
+      payload: {}
+    });
+    assert.strictEqual(rfc1918.status, 400, 'RFC1918 baseUrl must be blocked by default');
+
+    server.close();
+    assert.strictEqual(calls.length, 0, 'nothing should be forwarded to private addresses');
+    console.log('✅ Private/internal baseUrl targets blocked by default (SSRF guard)');
+  }
+
+  // 10. Upstream hanging forever must surface a 504, not an eternal hang
+  {
+    const neverFetch: FetchLike = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        );
+      });
+    const { server, port } = await startServer(createChatProxyRouter(neverFetch));
+
+    const started = Date.now();
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/gemini`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: SECRET_KEY, payload: {} })
+    });
+    const elapsed = Date.now() - started;
+    const json = await res.json().catch(() => ({}));
+
+    server.close();
+    assert.strictEqual(res.status, 504, 'a hanging upstream must produce 504');
+    assert(/timed out/.test(json.error || ''), '504 body must mention the timeout');
+    assert(elapsed < 70_000, 'proxy must abort on its own');
+    console.log(`✅ Hanging upstream aborted with 504 after ${elapsed}ms`);
   }
 
   console.log('\n🎉 ALL CHAT PROXY TESTS PASSED!\n');

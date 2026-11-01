@@ -150,13 +150,78 @@ describe('ChatSandboxService.sendUserMessage (openai provider)', () => {
 
     const msg = await ChatSandboxService.sendUserMessage('hello', [], [], config, vi.fn());
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    // First call: streaming attempt; the mock has no SSE body so the service
+    // falls back to the classic non-streaming request (second call).
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchMock.mock.calls[1];
     expect(String(url)).toBe('/api/chat/openai');
     expect(String(url)).not.toContain('sk-secret-key');
     const body = JSON.parse(init.body);
     expect(body.apiKey).toBe('sk-secret-key');
     expect(body.payload.model).toBe('gpt-4o-mini');
     expect(msg.content).toBe('Hey there');
+  });
+
+  it('streams OpenAI responses token by token when the proxy returns SSE', async () => {
+    const sseBody = [
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}',
+      '',
+      'data: {"choices":[{"delta":{"content":"lo!"}}]}',
+      '',
+      'data: [DONE]',
+      ''
+    ].join('\n');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: (n: string) => (n === 'content-type' ? 'text/event-stream' : null) },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(sseBody));
+          controller.close();
+        }
+      })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = { provider: 'openai', apiKey: 'sk', model: 'gpt-4o-mini' };
+    const onProgress = vi.fn();
+
+    const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, onProgress);
+
+    expect(msg.content).toBe('Hello!');
+    // Token-by-token rendering: at least one intermediate progress update.
+    expect(onProgress).toHaveBeenCalled();
+    // The streaming attempt must carry stream:true; no fallback call happens.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body).payload.stream).toBe(true);
+  });
+
+  it('falls back to the non-streaming request when the stream yields no text', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        // Streaming attempt: SSE content type but no text deltas.
+        ok: true,
+        headers: { get: (n: string) => (n === 'content-type' ? 'text/event-stream' : null) },
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            controller.close();
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'Fallback answer' } }] })
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: ChatConfig = { provider: 'openai', apiKey: 'sk', model: 'gpt-4o-mini' };
+
+    const msg = await ChatSandboxService.sendUserMessage('hi', [], [], config, vi.fn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(msg.content).toBe('Fallback answer');
   });
 });

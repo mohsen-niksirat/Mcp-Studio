@@ -269,7 +269,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'tools' && (
-            <ToolsView tools={tools} isLoading={isLoadingEntities} />
+            <ToolsView tools={tools} isLoading={isLoadingEntities} activeState={activeState} />
           )}
 
           {activeTab === 'resources' && (

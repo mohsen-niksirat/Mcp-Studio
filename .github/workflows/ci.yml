@@ -75,6 +75,13 @@ jobs:
       - name: Build client
         run: pnpm --filter mcp-studio-client build
 
+      - name: Build server
+        run: pnpm --filter mcp-studio-server build
+
+      # The whole monorepo must build cleanly (client dist + server dist).
+      - name: Build entire monorepo
+        run: pnpm build
+
   # Browser tests against the real stack. Chromium only: it is the fastest
   # browser to provision and the suite is browser-agnostic by design.
   e2e:

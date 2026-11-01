@@ -1,4 +1,4 @@
-export type TransportType = 'stdio' | 'sse' | 'mock';
+export type TransportType = 'stdio' | 'sse' | 'streamable-http' | 'mock';
 
 export interface ServerConfig {
   id: string;

@@ -2,6 +2,8 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   ServerConfig,
   ServerState,
@@ -13,15 +15,20 @@ import {
   BenchmarkResult
 } from '../types.js';
 import { MockMCPServer } from './mock-server.js';
+import { ServerStore } from './server-store.js';
 
 interface PendingRequest {
   resolve: (value: any) => void;
   reject: (reason?: any) => void;
   timestamp: number;
   method: string;
+  timer?: NodeJS.Timeout;
 }
 
 const MCP_PROTOCOL_VERSION = '2024-11-05';
+
+/** Default per-request JSON-RPC timeout in ms (override with MCP_RPC_TIMEOUT_MS). */
+const DEFAULT_RPC_TIMEOUT_MS = 10_000;
 
 export class MCPClientManager extends EventEmitter {
   private servers: Map<string, ServerConfig> = new Map();
@@ -29,15 +36,30 @@ export class MCPClientManager extends EventEmitter {
   private activeState: ServerState | null = null;
   private activeProcess: ChildProcess | null = null;
   private sseClient: Client | null = null;
-  private sseTransport: SSEClientTransport | null = null;
+  private remoteTransport: Transport | null = null;
   private mockServer: MockMCPServer = new MockMCPServer();
   private logs: JsonRpcMessageLog[] = [];
   private rpcIdCounter = 1;
-  private pendingRequests: Map<string | number, PendingRequest> = new Map();
+  private pendingRequests: Map<string, PendingRequest> = new Map();
   private stdoutBuffer = '';
+  private rpcTimeoutMs: number;
+  private connectQueue: Promise<unknown> = Promise.resolve();
+  private store: ServerStore | null;
 
-  constructor() {
+  constructor(options?: { rpcTimeoutMs?: number; store?: ServerStore | null }) {
     super();
+    const envTimeout = Number(process.env.MCP_RPC_TIMEOUT_MS);
+    this.rpcTimeoutMs =
+      options?.rpcTimeoutMs ??
+      (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_RPC_TIMEOUT_MS);
+    // Optional persistence: pass a store (or MCP_STUDIO_DISABLE_PERSISTENCE=1
+    // in tests) to keep registered servers across backend restarts.
+    this.store =
+      options?.store !== undefined
+        ? options.store
+        : /^(1|true|yes)$/i.test(process.env.MCP_STUDIO_DISABLE_PERSISTENCE || '')
+        ? null
+        : new ServerStore();
     // Default built-in Demo Server
     const defaultMock: ServerConfig = {
       id: 'demo-mock-server',
@@ -47,6 +69,24 @@ export class MCPClientManager extends EventEmitter {
       createdAt: Date.now()
     };
     this.servers.set(defaultMock.id, defaultMock);
+    this.loadPersistedServers();
+  }
+
+  private loadPersistedServers(): void {
+    if (!this.store) return;
+    for (const config of this.store.load()) {
+      if (config.id === 'demo-mock-server') continue; // built-in always wins
+      this.servers.set(config.id, config);
+    }
+  }
+
+  private persistServers(): void {
+    if (!this.store) return;
+    try {
+      this.store.save(this.getServers());
+    } catch (err) {
+      console.warn('[MCPClientManager] Failed to persist servers:', err);
+    }
   }
 
   getServers(): ServerConfig[] {
@@ -61,6 +101,7 @@ export class MCPClientManager extends EventEmitter {
       createdAt: Date.now()
     };
     this.servers.set(id, newConfig);
+    this.persistServers();
     return newConfig;
   }
 
@@ -68,7 +109,11 @@ export class MCPClientManager extends EventEmitter {
     if (this.activeId === id) {
       this.disconnect();
     }
-    return this.servers.delete(id);
+    const removed = this.servers.delete(id);
+    if (removed) {
+      this.persistServers();
+    }
+    return removed;
   }
 
   getActiveState(): ServerState | null {
@@ -97,7 +142,68 @@ export class MCPClientManager extends EventEmitter {
     return entry;
   }
 
+  /**
+   * Serialize concurrent connect() calls: each one waits for the previous
+   * connect/disconnect cycle to fully settle before touching shared state,
+   * so parallel callers cannot orphan processes or interleave state changes.
+   */
+  private enqueueConnect<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.connectQueue.then(fn, fn);
+    // Keep the queue alive even when a connect rejects.
+    this.connectQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Max automatic reconnect attempts after a crash. */
+  private static readonly MAX_CRASH_RETRIES = 3;
+  private crashRetryTimer: NodeJS.Timeout | null = null;
+  private crashRetryAttempt = 0;
+
+  /**
+   * Schedule an automatic reconnect after a crash with exponential backoff
+   * (1s, 2s, 4s). Gives up after MAX_CRASH_RETRIES and publishes the retry
+   * progress in the active state.
+   */
+  private scheduleCrashRetry(config: ServerConfig): void {
+    if (this.crashRetryAttempt >= MCPClientManager.MAX_CRASH_RETRIES) {
+      this.crashRetryAttempt = 0;
+      this.emit('notification', {
+        method: 'studio/retry-exhausted',
+        params: { serverId: config.id, message: 'Automatic reconnect gave up after 3 attempts' }
+      });
+      return;
+    }
+
+    this.crashRetryAttempt += 1;
+    const delayMs = 1000 * Math.pow(2, this.crashRetryAttempt - 1);
+
+    if (this.activeState) {
+      this.activeState = {
+        ...this.activeState,
+        status: 'connecting',
+        error: `Reconnecting after crash (attempt ${this.crashRetryAttempt}/${MCPClientManager.MAX_CRASH_RETRIES})...`
+      };
+      this.emit('state:changed', this.activeState);
+    }
+
+    if (this.crashRetryTimer) clearTimeout(this.crashRetryTimer);
+    this.crashRetryTimer = setTimeout(async () => {
+      this.crashRetryTimer = null;
+      try {
+        await this.connect(config.id);
+        this.crashRetryAttempt = 0;
+      } catch {
+        // connect() already published the error state; the next crash (or
+        // failure) re-enters scheduleCrashRetry through the exit handler.
+      }
+    }, delayMs);
+  }
+
   async connect(id: string): Promise<ServerState> {
+    return this.enqueueConnect(() => this.performConnect(id));
+  }
+
+  private async performConnect(id: string): Promise<ServerState> {
     const config = this.servers.get(id);
     if (!config) {
       throw new Error(`Server configuration not found for id: ${id}`);
@@ -116,6 +222,7 @@ export class MCPClientManager extends EventEmitter {
 
     try {
       if (config.transport === 'mock') {
+        this.crashRetryAttempt = 0;
         this.activeState = {
           config,
           status: 'connected',
@@ -132,16 +239,27 @@ export class MCPClientManager extends EventEmitter {
 
       if (config.transport === 'stdio') {
         await this.connectStdio(config);
+        this.crashRetryAttempt = 0;
         return this.activeState!;
       }
 
       if (config.transport === 'sse') {
         await this.connectSse(config);
+        this.crashRetryAttempt = 0;
+        return this.activeState!;
+      }
+
+      if (config.transport === 'streamable-http') {
+        await this.connectSse(config);
+        this.crashRetryAttempt = 0;
         return this.activeState!;
       }
 
       throw new Error(`Transport ${config.transport} is not supported.`);
     } catch (err: any) {
+      // The connection never came up: release the slot so the next connect
+      // is not blocked by a half-open session pointing at a dead target.
+      this.activeId = null;
       this.activeState = {
         config,
         status: 'error',
@@ -184,6 +302,7 @@ export class MCPClientManager extends EventEmitter {
           this.emit('state:changed', this.activeState);
           for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
             this.pendingRequests.delete(id);
+            if (pending.timer) clearTimeout(pending.timer);
             pending.reject(err);
           }
           reject(err);
@@ -239,8 +358,14 @@ export class MCPClientManager extends EventEmitter {
           // crash reason so connect() surfaces the same message as the state.
           for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
             this.pendingRequests.delete(id);
+            if (pending.timer) clearTimeout(pending.timer);
             pending.reject(new Error(message));
           }
+
+          // Automatic crash recovery: retry with exponential backoff, at most
+          // MAX_CRASH_RETRIES times. Each attempt is published in the state so
+          // the UI can show "reconnecting (attempt 2/3)".
+          this.scheduleCrashRetry(config);
         });
 
         // Send MCP initialize request
@@ -289,24 +414,32 @@ export class MCPClientManager extends EventEmitter {
    */
   private async connectSse(config: ServerConfig): Promise<void> {
     if (!config.url) {
-      throw new Error('SSE transport requires a url (e.g. http://localhost:8000/sse)');
+      throw new Error(
+        `${config.transport} transport requires a url (e.g. http://localhost:8000/mcp)`
+      );
     }
 
     let parsed: URL;
     try {
       parsed = new URL(config.url);
       if (!/^https?:$/i.test(parsed.protocol)) {
-        throw new Error('SSE url must use http(s)');
+        throw new Error('url must use http(s)');
       }
-    } catch {
-      throw new Error(`Invalid SSE url: ${config.url}`);
+    } catch (e: any) {
+      throw new Error(`Invalid ${config.transport} url: ${e?.message || config.url}`);
     }
 
     const headerEntries = Object.entries(config.headers || {});
-    const transport = new SSEClientTransport(parsed, {
-      requestInit: headerEntries.length > 0 ? { headers: Object.fromEntries(headerEntries) } : undefined
-    });
-    this.sseTransport = transport;
+    const headerInit =
+      headerEntries.length > 0 ? { headers: Object.fromEntries(headerEntries) } : undefined;
+
+    // Streamable HTTP is the modern transport; SSE is the legacy fallback.
+    // Both share the same client wiring below — only the transport differs.
+    const transport =
+      config.transport === 'streamable-http'
+        ? new StreamableHTTPClientTransport(parsed, { requestInit: headerInit })
+        : new SSEClientTransport(parsed, { requestInit: headerInit });
+    this.remoteTransport = transport;
 
     // Pipe transport-level frames into the protocol inspector. The SDK emits
     // parsed JSONRPCMessage objects; latency is attributed to the pending RPC
@@ -314,10 +447,16 @@ export class MCPClientManager extends EventEmitter {
     transport.onmessage = (msg: any) => {
       const isError = Boolean(msg?.error);
       const rpcId = msg?.id;
+      const pendingKey =
+        rpcId !== undefined && rpcId !== null
+          ? this.pendingKeyFor(rpcId)
+          : undefined;
+      const pending =
+        pendingKey !== undefined ? this.pendingRequests.get(pendingKey) : undefined;
 
-      if (rpcId !== undefined && this.pendingRequests.has(rpcId)) {
-        const pending = this.pendingRequests.get(rpcId)!;
-        this.pendingRequests.delete(rpcId);
+      if (pendingKey !== undefined && pending) {
+        this.pendingRequests.delete(pendingKey);
+        if (pending.timer) clearTimeout(pending.timer);
         const latencyMs = Date.now() - pending.timestamp;
         this.addLog({
           timestamp: Date.now(),
@@ -363,9 +502,9 @@ export class MCPClientManager extends EventEmitter {
       // A closed transport while this SSE session is still the active one
       // means the remote side went away — surface it the same way a crashed
       // stdio process is surfaced.
-      if (this.sseTransport !== transport) return;
+      if (this.remoteTransport !== transport) return;
       this.sseClient = null;
-      this.sseTransport = null;
+      this.remoteTransport = null;
       const message = 'SSE connection closed by the remote server';
       this.activeState = {
         config,
@@ -382,6 +521,7 @@ export class MCPClientManager extends EventEmitter {
       });
       for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
         this.pendingRequests.delete(id);
+        if (pending.timer) clearTimeout(pending.timer);
         pending.reject(new Error(message));
       }
     };
@@ -431,12 +571,32 @@ export class MCPClientManager extends EventEmitter {
     });
 
     const pending = new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(rpcId, {
+      const entry: PendingRequest = {
         resolve: (v: any) => resolve(v),
         reject,
         timestamp: start,
         method
-      });
+      };
+      entry.timer = setTimeout(() => {
+        const key = this.pendingKeyFor(rpcId);
+        if (this.pendingRequests.get(key) === entry) {
+          this.pendingRequests.delete(key);
+        }
+        this.addLog({
+          timestamp: Date.now(),
+          direction: 'incoming',
+          method,
+          rpcId,
+          data: { jsonrpc: '2.0', id: rpcId, error: { message: 'request timed out' } },
+          isError: true
+        });
+        reject(
+          new Error(
+            `request timed out after ${this.rpcTimeoutMs}ms waiting for a ${method} response`
+          )
+        );
+      }, this.rpcTimeoutMs);
+      this.pendingRequests.set(this.pendingKeyFor(rpcId), entry);
     });
 
     // The SDK resolves with the unwrapped result; settle the pending map entry
@@ -452,9 +612,11 @@ export class MCPClientManager extends EventEmitter {
           data: { jsonrpc: '2.0', id: rpcId, result: res },
           latencyMs
         });
-        const p = this.pendingRequests.get(rpcId);
+        const key = this.pendingKeyFor(rpcId);
+        const p = this.pendingRequests.get(key);
         if (p) {
-          this.pendingRequests.delete(rpcId);
+          this.pendingRequests.delete(key);
+          if (p.timer) clearTimeout(p.timer);
           p.resolve(res);
         }
       })
@@ -469,9 +631,11 @@ export class MCPClientManager extends EventEmitter {
           latencyMs,
           isError: true
         });
-        const p = this.pendingRequests.get(rpcId);
+        const key = this.pendingKeyFor(rpcId);
+        const p = this.pendingRequests.get(key);
         if (p) {
-          this.pendingRequests.delete(rpcId);
+          this.pendingRequests.delete(key);
+          if (p.timer) clearTimeout(p.timer);
           p.reject(err);
         }
       });
@@ -497,13 +661,29 @@ export class MCPClientManager extends EventEmitter {
     }
   }
 
+  /**
+   * Canonical pending-request map key for a JSON-RPC id: string form, so a
+   * string reply id still matches a numeric request id (and vice versa).
+   */
+  private pendingKeyFor(id: string | number): string {
+    return String(id);
+  }
+
   private handleIncomingRpc(msg: any) {
     const isError = Boolean(msg.error);
     const rpcId = msg.id;
 
-    if (rpcId !== undefined && this.pendingRequests.has(rpcId)) {
-      const pending = this.pendingRequests.get(rpcId)!;
-      this.pendingRequests.delete(rpcId);
+    // JSON-RPC ids may come back as a string while we sent a number (or vice
+    // versa); match on the canonical string form so replies are never lost.
+    const pendingKey =
+      rpcId !== undefined && rpcId !== null
+        ? this.pendingKeyFor(rpcId)
+        : undefined;
+    const pending = pendingKey !== undefined ? this.pendingRequests.get(pendingKey) : undefined;
+
+    if (pendingKey !== undefined && pending) {
+      this.pendingRequests.delete(pendingKey);
+      if (pending.timer) clearTimeout(pending.timer);
       const latencyMs = Date.now() - pending.timestamp;
 
       this.addLog({
@@ -555,17 +735,42 @@ export class MCPClientManager extends EventEmitter {
         data: payload
       });
 
-      this.pendingRequests.set(id, {
+      const key = this.pendingKeyFor(id);
+      const pending: PendingRequest = {
         resolve,
         reject,
         timestamp: Date.now(),
         method
-      });
+      };
+
+      // A silent stdio server must not hang the caller forever: arm a timer
+      // that rejects and removes the pending entry when it fires.
+      pending.timer = setTimeout(() => {
+        if (this.pendingRequests.get(key) === pending) {
+          this.pendingRequests.delete(key);
+        }
+        this.addLog({
+          timestamp: Date.now(),
+          direction: 'incoming',
+          method,
+          rpcId: id,
+          data: { jsonrpc: '2.0', id, error: { message: 'request timed out' } },
+          isError: true
+        });
+        reject(
+          new Error(
+            `request timed out after ${this.rpcTimeoutMs}ms waiting for a ${method} response`
+          )
+        );
+      }, this.rpcTimeoutMs);
+
+      this.pendingRequests.set(key, pending);
 
       if (this.activeProcess && this.activeProcess.stdin?.writable) {
         this.activeProcess.stdin.write(JSON.stringify(payload) + '\n');
       } else {
-        this.pendingRequests.delete(id);
+        if (pending.timer) clearTimeout(pending.timer);
+        this.pendingRequests.delete(key);
         reject(new Error('No active stdio process writable stream available.'));
       }
     });
@@ -591,6 +796,12 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    // A manual disconnect cancels any pending automatic crash retry.
+    if (this.crashRetryTimer) {
+      clearTimeout(this.crashRetryTimer);
+      this.crashRetryTimer = null;
+    }
+    this.crashRetryAttempt = 0;
     // Null the handle first: the exit handler treats a missing active process
     // as a stale event and leaves the state transition to us.
     const proc = this.activeProcess;
@@ -604,9 +815,9 @@ export class MCPClientManager extends EventEmitter {
     }
 
     // Tear down any SSE session before failing pending requests.
-    const sse = this.sseTransport;
+    const sse = this.remoteTransport;
     this.sseClient = null;
-    this.sseTransport = null;
+    this.remoteTransport = null;
     if (sse) {
       try {
         await sse.close();
@@ -618,6 +829,7 @@ export class MCPClientManager extends EventEmitter {
     // Callers awaiting in-flight RPCs must not hang on a closed connection.
     for (const [id, pending] of Array.from(this.pendingRequests.entries())) {
       this.pendingRequests.delete(id);
+      if (pending.timer) clearTimeout(pending.timer);
       pending.reject(new Error('MCP server connection closed'));
     }
 
@@ -866,9 +1078,12 @@ export class MCPClientManager extends EventEmitter {
     successRate: number;
     results: BenchmarkResult[];
   }> {
+    // Clamp to a sane range: 0/negative/NaN would produce NaN averages and
+    // division by zero, and absurd values would hammer the server.
+    const safeIterations = Math.min(Math.max(Math.floor(Number(iterations) || 0), 1), 100);
     const results: BenchmarkResult[] = [];
 
-    for (let i = 0; i < iterations; i++) {
+    for (let i = 0; i < safeIterations; i++) {
       const start = Date.now();
       try {
         await this.listTools();
@@ -893,11 +1108,13 @@ export class MCPClientManager extends EventEmitter {
     const successCount = results.filter((r) => r.success).length;
 
     return {
-      iterations,
-      avgLatencyMs: Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length),
-      minLatencyMs: Math.min(...latencies),
-      maxLatencyMs: Math.max(...latencies),
-      successRate: Math.round((successCount / iterations) * 100),
+      iterations: safeIterations,
+      avgLatencyMs: latencies.length
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0,
+      minLatencyMs: latencies.length ? Math.min(...latencies) : 0,
+      maxLatencyMs: latencies.length ? Math.max(...latencies) : 0,
+      successRate: safeIterations ? Math.round((successCount / safeIterations) * 100) : 0,
       results
     };
   }
