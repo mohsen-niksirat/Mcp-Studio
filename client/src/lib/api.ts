@@ -210,9 +210,16 @@ export const api = {
     return res.json();
   },
 
-  async getLogs(limit = 100): Promise<JsonRpcMessageLog[]> {
+  async getLogs(
+    limit = 100,
+    filters?: { direction?: 'incoming' | 'outgoing'; method?: string; errorsOnly?: boolean }
+  ): Promise<JsonRpcMessageLog[]> {
     if (isStandaloneWeb) return browserAdapter.getLogs(limit);
-    const res = await fetch(`${API_BASE}/logs?limit=${limit}`);
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (filters?.direction) params.set('direction', filters.direction);
+    if (filters?.method) params.set('method', filters.method);
+    if (filters?.errorsOnly) params.set('errorsOnly', '1');
+    const res = await fetch(`${API_BASE}/logs?${params.toString()}`);
     const data = await res.json();
     return data.logs || [];
   },

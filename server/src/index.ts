@@ -211,7 +211,23 @@ app.post('/api/servers/active/benchmark', async (req, res) => {
 
 app.get('/api/logs', (req, res) => {
   const limit = Number(req.query.limit) || 100;
-  res.json({ logs: clientManager.getLogs(limit) });
+  // Optional server-side filters so long traffic histories do not have to be
+  // shipped to the browser in full.
+  const direction = req.query.direction as string | undefined;
+  const method = (req.query.method as string | undefined)?.toLowerCase();
+  const errorsOnly = req.query.errorsOnly === '1' || req.query.errorsOnly === 'true';
+
+  let logs = clientManager.getLogs(limit);
+  if (direction === 'incoming' || direction === 'outgoing') {
+    logs = logs.filter((l) => l.direction === direction);
+  }
+  if (method) {
+    logs = logs.filter((l) => (l.method || '').toLowerCase().includes(method));
+  }
+  if (errorsOnly) {
+    logs = logs.filter((l) => l.isError);
+  }
+  res.json({ logs });
 });
 
 app.delete('/api/logs', (req, res) => {

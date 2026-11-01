@@ -21,6 +21,9 @@ interface TrafficViewProps {
   onClear: () => void;
 }
 
+/** Max rows rendered at once — beyond this the list is windowed. */
+const RENDER_WINDOW = 200;
+
 export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
   const [selectedLog, setSelectedLog] = useState<JsonRpcMessageLog | null>(
     logs[logs.length - 1] || null
@@ -30,6 +33,8 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
   const [errorOnly, setErrorOnly] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [serverLogs, setServerLogs] = useState<JsonRpcMessageLog[] | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
 
   // Follow the newest frame unless the user pinned a selection or paused.
   React.useEffect(() => {
@@ -41,14 +46,58 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     }
   }, [logs, isPaused, selectedLog]);
 
-  const filteredLogs = logs.filter((l) => {
-    if (directionFilter !== 'all' && l.direction !== directionFilter) return false;
-    if (errorOnly && !l.isError) return false;
+  // Server-side filtering: when the backend is reachable, query /api/logs
+  // with the filters so long histories do not travel in full. Falls back to
+  // the live WebSocket log buffer (client-side filtering) on any failure or
+  // in standalone web mode.
+  React.useEffect(() => {
+    if (api.isWebStandalone()) {
+      setServerLogs(null);
+      return;
+    }
+    let cancelled = false;
+    setIsFetching(true);
+    api
+      .getLogs(500, {
+        direction: directionFilter === 'all' ? undefined : directionFilter,
+        method: search || undefined,
+        errorsOnly: errorOnly
+      })
+      .then((logs) => {
+        if (!cancelled) setServerLogs(logs);
+      })
+      .catch(() => {
+        if (!cancelled) setServerLogs(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [directionFilter, search, errorOnly, logs.length]);
+
+  const baseLogs = serverLogs ?? logs;
+
+  const filteredLogs = baseLogs.filter((l) => {
+    if (serverLogs === null) {
+      // Client-side filtering path (live buffer / standalone mode).
+      if (directionFilter !== 'all' && l.direction !== directionFilter) return false;
+      if (errorOnly && !l.isError) return false;
+      if (!search) return true;
+      const matchMethod = l.method?.toLowerCase().includes(search.toLowerCase());
+      const matchData = JSON.stringify(l.data).toLowerCase().includes(search.toLowerCase());
+      return matchMethod || matchData;
+    }
+    // Server already applied direction/method/error filters; keep only the
+    // full-payload text search client-side.
     if (!search) return true;
-    const matchMethod = l.method?.toLowerCase().includes(search.toLowerCase());
-    const matchData = JSON.stringify(l.data).toLowerCase().includes(search.toLowerCase());
-    return matchMethod || matchData;
+    return JSON.stringify(l.data).toLowerCase().includes(search.toLowerCase());
   });
+
+  // Windowing: render at most the newest RENDER_WINDOW rows; older frames
+  // stay available through the server query.
+  const visibleLogs = filteredLogs.slice(-RENDER_WINDOW);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -123,12 +172,12 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {filteredLogs.length === 0 ? (
+          {visibleLogs.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 font-mono">
               No JSON-RPC traffic recorded yet.
             </div>
           ) : (
-            filteredLogs.map((log) => {
+            visibleLogs.map((log) => {
               const isSelected = selectedLog?.id === log.id;
               const isIncoming = log.direction === 'incoming';
 
