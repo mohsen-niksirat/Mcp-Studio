@@ -14,7 +14,10 @@ const SILENT_SERVER = `process.stdin.setEncoding('utf8');
 process.stdin.on('data', () => {
   // Swallow everything; never reply.
 });
-setInterval(() => {}, 1000); // stay alive
+// Exit when the studio closes the pipe (real MCP servers do the same), so a
+// leaked child cannot keep a test runner's event loop alive forever.
+process.stdin.on('end', () => process.exit(0));
+setInterval(() => {}, 1000); // stay alive until stdin closes
 `;
 
 async function runTests() {

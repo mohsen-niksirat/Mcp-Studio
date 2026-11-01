@@ -816,7 +816,23 @@ export class MCPClientManager extends EventEmitter {
     this.activeProcess = null;
     if (proc) {
       try {
-        proc.kill('SIGTERM');
+        // Close the pipe first: well-behaved MCP servers exit when stdin
+        // closes, which is the cleanest teardown path on every platform.
+        proc.stdin?.end();
+      } catch {
+        // ignore
+      }
+      try {
+        if (process.platform === 'win32' && proc.pid) {
+          // shell:true spawns cmd.exe wrapping the real server; killing the
+          // shell alone orphans the child (it keeps running and can keep the
+          // parent's event loop alive). taskkill /T takes down the tree.
+          spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], {
+            stdio: 'ignore'
+          });
+        } else {
+          proc.kill('SIGTERM');
+        }
       } catch (e) {
         // ignore
       }
