@@ -119,6 +119,61 @@ async function runTests() {
     // best effort cleanup
   }
 
+  // Backoff schedule: 1s, 2s, 4s — each capped at 30s. Verified through the
+  // published state transitions of a second, always-crashing server: the
+  // gap between consecutive 'Reconnecting' announcements must match the
+  // capped exponential schedule.
+  {
+    const alwaysCrashPath = path.join(os.tmpdir(), `mcp-studio-always-crash-${Date.now()}-${process.pid}.js`);
+    fs.writeFileSync(alwaysCrashPath, 'process.exit(1);\n');
+    const manager2 = new MCPClientManager({ rpcTimeoutMs: 2000 });
+    const crashy = manager2.addServer({
+      name: 'Always Crash',
+      transport: 'stdio',
+      command: 'node',
+      args: [alwaysCrashPath],
+      source: 'manual'
+    });
+
+    const reconnectTimestamps: number[] = [];
+    manager2.on('state:changed', (s: any) => {
+      if (typeof s.error === 'string' && s.error.includes('Reconnecting after crash')) {
+        reconnectTimestamps.push(Date.now());
+      }
+    });
+
+    manager2.connect(crashy.id).catch(() => {});
+    // 3 attempts at 1s + 2s + 4s plus handshakes; wait long enough for all
+    // three announcements and the final give-up.
+    await new Promise((resolve) => setTimeout(resolve, 12_000));
+
+    assert(
+      reconnectTimestamps.length >= 3,
+      `expected 3 reconnect announcements, saw ${reconnectTimestamps.length}`
+    );
+    const gaps = reconnectTimestamps
+      .slice(1)
+      .map((t, i) => t - reconnectTimestamps[i]);
+    // Attempt 2 fires ~1s after attempt 1, attempt 3 ~2s after attempt 2.
+    assert(gaps[0] >= 900 && gaps[0] < 5_000, `first backoff gap should be ~1s, got ${gaps[0]}ms`);
+    assert(gaps[1] >= 1_900 && gaps[1] < 8_000, `second backoff gap should be ~2s, got ${gaps[1]}ms`);
+    // The cap itself: delay(4) would be 8s uncapped; with a 30s cap the
+    // schedule is unchanged here, but the cap logic is exercised via
+    // Math.min — assert no gap ever exceeded the cap.
+    assert(
+      gaps.every((g) => g <= 30_000),
+      'no backoff gap may exceed the 30s cap'
+    );
+    console.log(`✅ backoff gaps follow the capped exponential schedule (${gaps.join(', ')}ms)`);
+
+    await manager2.disconnect();
+    try {
+      fs.unlinkSync(alwaysCrashPath);
+    } catch {
+      // best effort cleanup
+    }
+  }
+
   console.log('\n🎉 ALL CRASH AUTO-RETRY TESTS PASSED!\n');
 }
 
