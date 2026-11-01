@@ -7,12 +7,14 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Download,
   Key,
   RefreshCw,
   Send,
   Sliders,
   Sparkles,
   Trash2,
+  Upload,
   User,
   Wrench
 } from 'lucide-react';
@@ -121,6 +123,33 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
     localStorage.removeItem('mcp_studio_chat_history');
   };
 
+  const handleExport = () => {
+    const dataStr =
+      'data:text/json;charset=utf-8,' +
+      encodeURIComponent(JSON.stringify(messages, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', 'mcp-studio-chat-history.json');
+    dlAnchor.click();
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
+          setMessages(imported);
+        }
+      } catch {
+        alert('Invalid chat history JSON file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const toggleCallExpand = (id: string) => {
     setExpandedCalls((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -163,6 +192,24 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
         </div>
 
         <div className="flex items-center gap-2">
+          <label
+            className="p-2 bg-surface-900 border border-surface-800 hover:border-brand-500/30 text-slate-400 hover:text-slate-200 rounded-lg transition-colors cursor-pointer"
+            title="Import chat history JSON"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+          </label>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={handleExport}
+            title="Export chat history as JSON"
+            disabled={messages.length === 0}
+          >
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+
           <Button
             size="sm"
             variant={showSettings ? 'primary' : 'secondary'}
