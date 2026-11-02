@@ -11,7 +11,31 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-app.use(cors());
+const PORT = Number(process.env.PORT) || 4999;
+
+/**
+ * The backend executes local processes and holds provider keys, so it must
+ * not be readable from arbitrary websites: only the bundled UI origins
+ * (Vite dev server, the production server itself, the desktop shell) are
+ * allowed. Requests without an Origin header (curl, tests, the desktop
+ * launcher) are same-authority clients and pass through.
+ */
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`
+]);
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  return !origin || ALLOWED_ORIGINS.has(origin);
+}
+
+app.use(
+  cors({
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin))
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 
 const clientManager = new MCPClientManager();
@@ -19,32 +43,49 @@ const clientManager = new MCPClientManager();
 // WebSocket real-time event broadcasting
 const clients = new Set<WebSocket>();
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  if (!isAllowedOrigin(req.headers.origin)) {
+    ws.close(1008, 'Origin not allowed');
+    return;
+  }
   clients.add(ws);
 
   // Send initial state & recent logs on connect
   ws.send(JSON.stringify({
     type: 'init',
-    state: clientManager.getActiveState(),
+    state: clientManager.getActiveStateForClient(),
     logs: clientManager.getLogs(50)
   }));
 
   ws.on('close', () => {
     clients.delete(ws);
   });
+
+  ws.on('error', () => {
+    // Socket failures (reset, write after close) must not crash the process.
+    clients.delete(ws);
+  });
+});
+
+wss.on('error', (err) => {
+  console.error('[MCP-Studio Server] WebSocket server error:', err);
 });
 
 function broadcast(type: string, payload: any) {
   const message = JSON.stringify({ type, payload });
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      try {
+        client.send(message);
+      } catch {
+        clients.delete(client);
+      }
     }
   }
 }
 
 clientManager.on('state:changed', (state) => {
-  broadcast('state:changed', state);
+  broadcast('state:changed', clientManager.getActiveStateForClient());
 });
 
 clientManager.on('log', (log) => {
@@ -60,8 +101,17 @@ clientManager.on('logs:cleared', () => {
 });
 
 clientManager.on('state:crashed', (payload) => {
-  broadcast('state:crashed', payload);
+  broadcast('state:crashed', {
+    ...payload,
+    config: { ...payload.config, env: redactEnv(payload.config.env) }
+  });
 });
+
+/** Mirror of the backend redaction: env values never leave the process. */
+function redactEnv(env?: Record<string, string>): Record<string, string> | undefined {
+  if (!env) return env;
+  return Object.fromEntries(Object.keys(env).map((key) => [key, '********']));
+}
 
 // Secure AI chat proxy: provider keys arrive in the request body and are
 // forwarded server-side so they never appear in any URL.
@@ -70,28 +120,74 @@ app.use(createChatProxyRouter());
 // REST Endpoints
 app.get('/api/servers', (req, res) => {
   res.json({
-    servers: clientManager.getServers(),
-    activeState: clientManager.getActiveState()
+    servers: clientManager.getServersForClient(),
+    activeState: clientManager.getActiveStateForClient()
   });
 });
 
+const VALID_TRANSPORTS = new Set(['stdio', 'sse', 'streamable-http', 'mock']);
+
+/**
+ * Reject malformed server configs at the boundary so junk never reaches the
+ * spawn/connect layer or the persisted store.
+ */
+function validateServerInput(
+  input: any
+): { name: string; transport: any; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string> } | string {
+  if (typeof input?.name !== 'string' || !input.name.trim()) {
+    return 'name must be a non-empty string';
+  }
+  const transport = input.transport;
+  if (typeof transport !== 'string' || !VALID_TRANSPORTS.has(transport)) {
+    return `transport must be one of: ${Array.from(VALID_TRANSPORTS).join(', ')}`;
+  }
+  const isRecordOfStrings = (v: any) =>
+    v === undefined ||
+    (typeof v === 'object' &&
+      v !== null &&
+      !Array.isArray(v) &&
+      Object.values(v).every((x) => typeof x === 'string'));
+  if (transport === 'stdio') {
+    if (typeof input.command !== 'string' || !input.command.trim()) {
+      return 'stdio transport requires a command';
+    }
+    if (input.args !== undefined && (!Array.isArray(input.args) || input.args.some((a: any) => typeof a !== 'string'))) {
+      return 'args must be an array of strings';
+    }
+    if (!isRecordOfStrings(input.env)) {
+      return 'env must be an object of string values';
+    }
+  }
+  if (transport === 'sse' || transport === 'streamable-http') {
+    if (typeof input.url !== 'string' || !/^https?:\/\//i.test(input.url)) {
+      return `${transport} transport requires an http(s) url`;
+    }
+    if (!isRecordOfStrings(input.headers)) {
+      return 'headers must be an object of string values';
+    }
+  }
+  return {
+    name: input.name,
+    transport,
+    command: input.command,
+    args: input.args,
+    env: input.env,
+    url: input.url,
+    headers: input.headers
+  };
+}
+
 app.post('/api/servers', (req, res) => {
   try {
-    const { name, transport, command, args, env, url, headers } = req.body;
-    if (!name || !transport) {
-      return res.status(400).json({ error: 'Name and transport are required' });
+    const validated = validateServerInput(req.body);
+    if (typeof validated === 'string') {
+      return res.status(400).json({ error: validated });
     }
     const created = clientManager.addServer({
-      name,
-      transport,
-      command,
-      args,
-      env,
-      url,
-      headers,
+      ...validated,
       source: 'manual'
     });
-    res.status(201).json(created);
+    res.status(201).json({ ...created, env: redactEnv(created.env) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -105,7 +201,7 @@ app.delete('/api/servers/:id', (req, res) => {
 app.post('/api/servers/:id/connect', async (req, res) => {
   try {
     const state = await clientManager.connect(req.params.id);
-    res.json(state);
+    res.json(clientManager.getActiveStateForClient());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -113,8 +209,8 @@ app.post('/api/servers/:id/connect', async (req, res) => {
 
 app.post('/api/servers/:id/reconnect', async (req, res) => {
   try {
-    const state = await clientManager.reconnect(req.params.id);
-    res.json(state);
+    await clientManager.reconnect(req.params.id);
+    res.json(clientManager.getActiveStateForClient());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -130,7 +226,7 @@ app.post('/api/servers/disconnect', async (req, res) => {
 });
 
 app.get('/api/servers/active/state', (req, res) => {
-  res.json({ state: clientManager.getActiveState() });
+  res.json({ state: clientManager.getActiveStateForClient() });
 });
 
 app.get('/api/servers/active/tools', async (req, res) => {
@@ -252,17 +348,15 @@ app.post('/api/import/apply', (req, res) => {
     }
     const imported: any[] = [];
     for (const s of servers) {
+      const validated = validateServerInput(s);
+      if (typeof validated === 'string') {
+        return res.status(400).json({ error: `Invalid server "${s?.name ?? '?'}": ${validated}` });
+      }
       const added = clientManager.addServer({
-        name: s.name,
-        transport: s.transport,
-        command: s.command,
-        args: s.args,
-        env: s.env,
-        url: s.url,
-        headers: s.headers,
+        ...validated,
         source: s.source || 'claude'
       });
-      imported.push(added);
+      imported.push({ ...added, env: redactEnv(added.env) });
     }
     res.json({ importedCount: imported.length, imported });
   } catch (err: any) {
@@ -290,7 +384,6 @@ app.use((req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 4999;
 server.listen(PORT, () => {
   console.log(`🚀 [MCP-Studio Server] Listening on http://localhost:${PORT}`);
   console.log(`🔌 [MCP-Studio Server] WebSocket ready at ws://localhost:${PORT}`);

@@ -30,6 +30,80 @@ const MCP_PROTOCOL_VERSION = '2024-11-05';
 /** Default per-request JSON-RPC timeout in ms (override with MCP_RPC_TIMEOUT_MS). */
 const DEFAULT_RPC_TIMEOUT_MS = 10_000;
 
+/** Cap for the remote (SSE / streamable-http) handshake so a silent endpoint
+ *  cannot wedge the serialized connect queue forever. */
+const REMOTE_CONNECT_TIMEOUT_MS = 15_000;
+
+/** NUL bytes cannot travel through exec argv and only make sense as an
+ *  injection attempt. */
+function assertSafeArg(arg: string): void {
+  if (arg.includes('\0')) {
+    throw new Error('Server arguments must not contain NUL bytes');
+  }
+}
+
+/** POSIX shell single-quote: makes every character literal, including spaces
+ *  and metacharacters. */
+function posixQuoteArg(arg: string): string {
+  assertSafeArg(arg);
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * cmd.exe (the shell Node uses with `shell: true` on Windows) parses quotes
+ * by naive toggling, so an embedded double quote can break out of the quoted
+ * region and inject shell metacharacters. Arguments containing double quotes
+ * or line breaks are therefore rejected; everything else that cmd would
+ * treat specially (spaces, & | < > ^) is made literal by double-quoting.
+ */
+function windowsQuoteArg(arg: string): string {
+  assertSafeArg(arg);
+  if (/["\r\n]/.test(arg)) {
+    throw new Error(
+      'Server arguments must not contain double quotes or line breaks on Windows'
+    );
+  }
+  if (arg === '' || /[\s"&|<>^]/.test(arg)) {
+    return `"${arg}"`;
+  }
+  return arg;
+}
+
+/**
+ * Quote stdio arguments for execution through a shell. `shell: true` is
+ * required on Windows so `npx`, `uvx`, ... resolve to their .cmd shims, and
+ * it also keeps multi-word commands ("npx -y pkg") working on POSIX; quoting
+ * keeps every argument byte-literal for the real child process.
+ */
+function quoteArgsForShell(args: string[]): string[] {
+  const quote = process.platform === 'win32' ? windowsQuoteArg : posixQuoteArg;
+  return args.map(quote);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+/** Values that must never leave the backend (imported tokens, secrets). */
+const REDACTED = '********';
+
+function redactRecord(obj?: Record<string, string>): Record<string, string> | undefined {
+  if (!obj) return obj;
+  return Object.fromEntries(Object.keys(obj).map((key) => [key, REDACTED]));
+}
+
 export class MCPClientManager extends EventEmitter {
   private servers: Map<string, ServerConfig> = new Map();
   private activeId: string | null = null;
@@ -83,7 +157,7 @@ export class MCPClientManager extends EventEmitter {
   private persistServers(): void {
     if (!this.store) return;
     try {
-      this.store.save(this.getServers());
+      this.store.save(Array.from(this.servers.values()));
     } catch (err) {
       console.warn('[MCPClientManager] Failed to persist servers:', err);
     }
@@ -91,6 +165,24 @@ export class MCPClientManager extends EventEmitter {
 
   getServers(): ServerConfig[] {
     return Array.from(this.servers.values());
+  }
+
+  /** Client-facing server list: env values are redacted (the client never
+   *  needs them; they only exist for the backend spawn). */
+  getServersForClient(): ServerConfig[] {
+    return this.getServers().map((config) => ({
+      ...config,
+      env: redactRecord(config.env)
+    }));
+  }
+
+  /** Client-facing active state: same redaction as getServersForClient. */
+  getActiveStateForClient(): ServerState | null {
+    if (!this.activeState) return null;
+    return {
+      ...this.activeState,
+      config: { ...this.activeState.config, env: redactRecord(this.activeState.config.env) }
+    };
   }
 
   addServer(config: Omit<ServerConfig, 'id' | 'createdAt'>): ServerConfig {
@@ -107,7 +199,12 @@ export class MCPClientManager extends EventEmitter {
 
   removeServer(id: string): boolean {
     if (this.activeId === id) {
-      this.disconnect();
+      // Serialize the teardown with any in-flight connect so we never kill a
+      // process mid-handshake; the map entry is removed immediately, so a
+      // queued connect for this id will fail with "configuration not found".
+      void this.enqueueConnect(async () => {
+        await this.disconnect();
+      });
     }
     const removed = this.servers.delete(id);
     if (removed) {
@@ -195,6 +292,13 @@ export class MCPClientManager extends EventEmitter {
     if (this.crashRetryTimer) clearTimeout(this.crashRetryTimer);
     this.crashRetryTimer = setTimeout(async () => {
       this.crashRetryTimer = null;
+      // If the user actively switched to another server, never steal the
+      // active slot back. A null activeId is the normal post-crash state
+      // (the failed connect released the slot) and must still retry.
+      if (this.activeId !== null && this.activeId !== config.id) {
+        this.crashRetryAttempt = 0;
+        return;
+      }
       try {
         await this.connect(config.id);
         this.crashRetryAttempt = 0;
@@ -265,6 +369,24 @@ export class MCPClientManager extends EventEmitter {
     } catch (err: any) {
       // The connection never came up: release the slot so the next connect
       // is not blocked by a half-open session pointing at a dead target.
+      // A stdio child spawned before the failure must be killed now — an
+      // orphaned process would leak pipes and, when it eventually exits,
+      // hijack the active state via its exit handler.
+      const orphan = this.activeProcess;
+      this.activeProcess = null;
+      if (orphan) {
+        try {
+          if (process.platform === 'win32' && orphan.pid) {
+            spawn('taskkill', ['/pid', String(orphan.pid), '/T', '/F'], {
+              stdio: 'ignore'
+            });
+          } else {
+            orphan.kill('SIGTERM');
+          }
+        } catch {
+          // ignore
+        }
+      }
       this.activeId = null;
       this.activeState = {
         config,
@@ -289,11 +411,19 @@ export class MCPClientManager extends EventEmitter {
         };
 
         const cmd = config.command!;
-        const proc: any = spawn(cmd, config.args || [], {
-          env,
-          shell: true,
-          stdio: ['pipe', 'pipe', 'pipe']
-        });
+        let proc: any;
+        try {
+          proc = spawn(cmd, quoteArgsForShell(config.args || []), {
+            env,
+            shell: true,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+        } catch (spawnErr) {
+          // quoteArgsForShell rejects injection-shaped arguments before any
+          // process is created.
+          reject(spawnErr);
+          return;
+        }
 
         this.activeProcess = proc;
         this.stdoutBuffer = '';
@@ -376,7 +506,7 @@ export class MCPClientManager extends EventEmitter {
 
         // Send MCP initialize request
         this.sendJsonRpcRequest('initialize', {
-          protocolVersion: '2024-11-05',
+          protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {
             sampling: {},
             roots: { listChanged: true }
@@ -441,6 +571,9 @@ export class MCPClientManager extends EventEmitter {
 
     // Streamable HTTP is the modern transport; SSE is the legacy fallback.
     // Both share the same client wiring below — only the transport differs.
+    // requestInit headers apply to the POSTs AND to the initial SSE GET
+    // (the SDK routes the EventSource stream through a fetch override that
+    // merges _commonHeaders), so auth-protected endpoints handshake fine.
     const transport =
       config.transport === 'streamable-http'
         ? new StreamableHTTPClientTransport(parsed, { requestInit: headerInit })
@@ -451,35 +584,17 @@ export class MCPClientManager extends EventEmitter {
     // parsed JSONRPCMessage objects; latency is attributed to the pending RPC
     // that matches the response id.
     transport.onmessage = (msg: any) => {
-      const isError = Boolean(msg?.error);
-      const rpcId = msg?.id;
-      const pendingKey =
-        rpcId !== undefined && rpcId !== null
-          ? this.pendingKeyFor(rpcId)
-          : undefined;
-      const pending =
-        pendingKey !== undefined ? this.pendingRequests.get(pendingKey) : undefined;
-
-      if (pendingKey !== undefined && pending) {
-        this.pendingRequests.delete(pendingKey);
-        if (pending.timer) clearTimeout(pending.timer);
-        const latencyMs = Date.now() - pending.timestamp;
-        this.addLog({
-          timestamp: Date.now(),
-          direction: 'incoming',
-          method: pending.method,
-          rpcId,
-          data: msg,
-          latencyMs,
-          isError
-        });
-        if (isError) {
-          pending.reject(new Error(msg.error.message || JSON.stringify(msg.error)));
-        } else {
-          pending.resolve(msg.result);
-        }
+      // Response frames are logged by sendSseRequest with proper latency
+      // attribution; logging them here too would duplicate every entry in
+      // the protocol inspector. Only forward requests/notifications.
+      const isResponse =
+        msg && msg.method === undefined && (msg.result !== undefined || msg.error !== undefined);
+      if (isResponse) {
         return;
       }
+
+      const isError = Boolean(msg?.error);
+      const rpcId = msg?.id;
 
       this.addLog({
         timestamp: Date.now(),
@@ -541,7 +656,26 @@ export class MCPClientManager extends EventEmitter {
     this.sseClient = client;
 
     const start = Date.now();
-    await client.connect(transport);
+    try {
+      // A remote endpoint that never completes negotiation must not wedge
+      // the serialized connect queue forever.
+      await withTimeout(
+        client.connect(transport),
+        REMOTE_CONNECT_TIMEOUT_MS,
+        `${config.transport} connect timed out after ${REMOTE_CONNECT_TIMEOUT_MS}ms`
+      );
+    } catch (err) {
+      // Drop the half-open session so later connects are not blocked by it.
+      // Null the handles first so transport.onclose treats this as stale.
+      this.sseClient = null;
+      this.remoteTransport = null;
+      try {
+        await transport.close();
+      } catch {
+        // ignore teardown failures
+      }
+      throw err;
+    }
     const pingMs = Date.now() - start;
 
     const info = client.getServerVersion();
@@ -868,8 +1002,10 @@ export class MCPClientManager extends EventEmitter {
   }
 
   async reconnect(id: string): Promise<ServerState> {
-    await this.disconnect();
-    return this.connect(id);
+    return this.enqueueConnect(async () => {
+      await this.disconnect();
+      return this.performConnect(id);
+    });
   }
 
   // MCP Operations
@@ -880,6 +1016,15 @@ export class MCPClientManager extends EventEmitter {
 
     if (this.activeState.config.transport === 'mock') {
       return this.mockServer.getTools();
+    }
+
+    // Remote sessions (SSE / streamable-http) are served by the SDK client;
+    // the raw JSON-RPC path below only works for stdio processes.
+    if (this.sseClient) {
+      const res = await this.sendSseRequest<any>('tools/list', () =>
+        this.sseClient!.listTools()
+      );
+      return res?.tools || [];
     }
 
     const res = await this.sendJsonRpcRequest('tools/list', {});
@@ -917,7 +1062,7 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
-    if (this.activeState.config.transport === 'sse') {
+    if (this.sseClient) {
       const res = await this.sendSseRequest('tools/call', () =>
         this.sseClient!.callTool({ name, arguments: args })
       );
@@ -949,7 +1094,7 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
-    if (this.activeState.config.transport === 'sse') {
+    if (this.sseClient) {
       const [resList, tmplList] = await Promise.all([
         this.sendSseRequest<any>('resources/list', () =>
           this.sseClient!.listResources()
@@ -1006,7 +1151,7 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
-    if (this.activeState.config.transport === 'sse') {
+    if (this.sseClient) {
       const res = await this.sendSseRequest('resources/read', () =>
         this.sseClient!.readResource({ uri })
       );
@@ -1032,7 +1177,7 @@ export class MCPClientManager extends EventEmitter {
       return this.mockServer.getPrompts();
     }
 
-    if (this.activeState.config.transport === 'sse') {
+    if (this.sseClient) {
       const res = await this.sendSseRequest<any>('prompts/list', () =>
         this.sseClient!.listPrompts()
       );
@@ -1074,7 +1219,7 @@ export class MCPClientManager extends EventEmitter {
       };
     }
 
-    if (this.activeState.config.transport === 'sse') {
+    if (this.sseClient) {
       const res = await this.sendSseRequest('prompts/get', () =>
         this.sseClient!.getPrompt({ name, arguments: args })
       );

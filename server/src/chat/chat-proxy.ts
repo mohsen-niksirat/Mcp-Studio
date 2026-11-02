@@ -119,7 +119,7 @@ export function createChatProxyRouter(fetchImpl: FetchLike = fetch): Router {
     // x-goog-api-key header, never as a URL query param.
     const action =
       stream === true ? `${modelName}:streamGenerateContent?alt=sse` : `${modelName}:generateContent`;
-    forwardUpstream(res, fetchImpl, `${GEMINI_BASE_URL}/models/${action}`, {
+    forwardUpstream(req, res, fetchImpl, `${GEMINI_BASE_URL}/models/${action}`, {
       'Content-Type': 'application/json',
       'x-goog-api-key': apiKey
     }, serializedPayload);
@@ -150,13 +150,14 @@ export function createChatProxyRouter(fetchImpl: FetchLike = fetch): Router {
     if (typeof apiKey === 'string' && apiKey) {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
-    forwardUpstream(res, fetchImpl, `${base}/chat/completions`, headers, serializedPayload);
+    forwardUpstream(req, res, fetchImpl, `${base}/chat/completions`, headers, serializedPayload);
   });
 
   return router;
 }
 
 function forwardUpstream(
+  req: Request,
   res: Response,
   fetchImpl: FetchLike,
   url: string,
@@ -164,11 +165,31 @@ function forwardUpstream(
   body: string
 ): void {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  let timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  // A streaming upstream can stall mid-body long after the headers arrived;
+  // re-arm the timer as an idle timeout on every chunk so a hung stream
+  // cannot pin the response (and the socket) open forever.
+  const armIdleTimeout = () => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  };
+  // Stop proxying as soon as the client is gone; the upstream is aborted so
+  // tokens are not generated (and billed) for a dead connection. The timer
+  // must also be released when the response completes, or it would keep the
+  // process alive for UPSTREAM_TIMEOUT_MS after every request.
+  let clientGone = false;
+  res.on('close', () => {
+    clearTimeout(timeout);
+    if (!res.writableEnded) {
+      clientGone = true;
+      controller.abort();
+    }
+  });
 
   fetchImpl(url, { method: 'POST', headers, body, signal: controller.signal })
     .then((upstream) => {
-      clearTimeout(timeout);
+      if (clientGone) return;
+      armIdleTimeout();
       res.status(upstream.status);
       const contentType = upstream.headers?.get?.('content-type');
       if (contentType) {
@@ -180,6 +201,7 @@ function forwardUpstream(
       }
       // Stream the upstream body straight through to the client.
       const passthrough = Readable.fromWeb(upstream.body);
+      passthrough.on('data', armIdleTimeout);
       passthrough.on('error', () => {
         // Headers are already sent; all we can do is tear the connection down
         // instead of leaving it hanging (or crashing on an unhandled error).
@@ -189,6 +211,7 @@ function forwardUpstream(
     })
     .catch((err: unknown) => {
       clearTimeout(timeout);
+      if (clientGone) return;
       const message = err instanceof Error ? err.message : String(err);
       if (!res.headersSent) {
         if ((err as Error)?.name === 'AbortError') {
