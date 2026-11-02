@@ -16,7 +16,7 @@
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-emerald.svg)](https://modelcontextprotocol.io/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
-
+[![M8ven Score](https://m8ven.ai/badge/mcp/mohsen-niksirat-mcp-studio-1qazb4?v=cd6fa2b040e1cf8018294bde5268f842)](https://m8ven.ai/mcp/mohsen-niksirat-mcp-studio-1qazb4?s=readme)
 [**Live Web Demo**](https://mohsen-niksirat.github.io/Mcp-Studio/) • [**Getting Started**](#-quick-start) • [**Features**](#-features) • [**Architecture**](#-architecture) • [**API**](#-rest-api-reference) • [**Testing**](#-testing) • [**Roadmap**](#-roadmap)
 
 <br/>
