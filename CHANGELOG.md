@@ -5,6 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-11-02
+
+### Security
+- **Origin-restricted API surface**: the backend previously answered every
+  endpoint (including server registration that spawns local processes) with
+  fully open CORS; browser origins are now limited to the bundled UI
+  (Vite dev server and the production/desktop origin), and WebSocket
+  connections validate the `Origin` header the same way. Any website a user
+  visits could previously drive the local backend cross-origin.
+- **Secrets no longer leave the backend**: `env` values (imported tokens,
+  credentials) are redacted in every REST response and WebSocket broadcast;
+  the persisted store keeps the real values.
+- **Hardened stdio spawning**: arguments are shell-quoted before the
+  `shell: true` spawn (fixing args containing spaces, e.g. Windows paths)
+  and arguments containing double quotes, line breaks, or NUL bytes are
+  rejected with a clear error instead of being interpreted by the shell.
+
+### Fixed
+- **Remote transport operations**: `tools/list` had no SSE/streamable-http
+  branch and always fell into the stdio path, so the Tools tab (and the
+  benchmark) failed for every remote server; all MCP operations now
+  dispatch on the active SDK client instead of the literal `'sse'` string,
+  which also makes `streamable-http` servers fully usable.
+- **Orphaned stdio processes**: a connect that failed after spawn (e.g.
+  initialize timeout) now kills the child process immediately; previously
+  the orphan leaked and could later hijack the active state with a
+  `state:crashed` event and trigger an unwanted auto-reconnect.
+- **Crash-retry slot stealing**: the automatic reconnect timer no longer
+  fires when the user has switched to a different server in the meantime.
+- **Remote connect hangs**: the SDK handshake is bounded by a 15s timeout
+  and a failed remote connect tears down the half-open transport, so one
+  silent endpoint can no longer wedge the serialized connect queue.
+- **WebSocket robustness**: server- and socket-level `error` events are
+  handled instead of crashing the process, and `broadcast()` tolerates
+  closed sockets.
+- **SSE traffic inspector**: response frames are no longer logged twice
+  (once as a phantom notification); latency attribution stays with the
+  owning request.
+- **Chat proxy streaming**: an idle timeout re-arms on every streamed chunk
+  so a stalled upstream cannot pin the response open forever, and the
+  upstream request is aborted as soon as the browser disconnects.
+- **REST input validation**: `POST /api/servers` and `/api/import/apply`
+  validate transport, command/url, args, env, and header shapes at the
+  boundary instead of persisting junk configs that only fail at connect.
+- **Client: chat crash on corrupted storage**: the chat history/config
+  `localStorage` initializers are guarded, so a corrupted entry can no
+  longer white-screen the app on load.
+- **Client: multi tool-call contract**: the OpenAI-compatible chat loop now
+  executes every returned `tool_call` and answers with one `role: "tool"`
+  message per call, instead of dropping all but the first (which caused
+  API 400s on follow-up turns).
+- **Client: import flow**: `importServers` checks `res.ok` and surfaces the
+  server error, and re-imported servers merge by id instead of duplicating.
+- **Client: schema form editing**: the raw JSON editor no longer fights the
+  form fields (caret jumps / rewritten text mid-typing), and non-object
+  JSON is rejected as form values.
+- **Client: traffic view**: `/api/logs` is fetched once and merged with
+  live WebSocket frames in memory (no refetch per frame), with a debounced
+  search filter.
+- **Client: stale async writes**: tool executions, server connects, and
+  collection runs guard against out-of-order responses so results can no
+  longer land under the wrong tool/server or revert concurrent edits.
+- **Client: server modal**: state resets between opens, quoted arguments
+  (`--root "C:\Program Files\server"`) parse correctly, and SSE URLs are
+  validated before submit.
+- **Client: command palette**: selecting a tool result now actually opens
+  and selects that tool in the runner.
+- **Client: misc**: code snippets escape shell metacharacters, chat history
+  persistence is debounced (was: on every streaming token), imported JSON
+  is shape-validated, and the WebSocket reconnect uses capped exponential
+  backoff.
+
 ## [1.5.0] - 2026-11-01
 
 ### Added
