@@ -28,15 +28,26 @@ export const api = {
     // permanently strand the session in standalone mode even though the
     // backend is up. Without a backend (GitHub Pages demo) the probe fails
     // fast, so the extra attempt costs nothing there.
+    let sawResponse = false;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const res = await fetch(`${API_BASE}/servers`, { signal: AbortSignal.timeout(2000) });
-        if (!res.ok) throw new Error('Backend not available');
+        if (!res.ok) {
+          // The backend answered (e.g. a 500 during startup) — it exists, so
+          // this must never fall back to the in-browser mock.
+          sawResponse = true;
+          continue;
+        }
         isStandaloneWeb = false;
         return res.json();
       } catch {
-        // Retry once before switching to In-Browser Web Mode.
+        // Network-level failure: retry once before switching to In-Browser
+        // Web Mode.
       }
+    }
+    if (sawResponse) {
+      isStandaloneWeb = false;
+      throw new Error('Backend not available');
     }
     isStandaloneWeb = true;
     return {
@@ -245,6 +256,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ servers })
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to import servers' }));
+      throw new Error(err.error || 'Failed to import servers');
+    }
     return res.json();
   }
 };

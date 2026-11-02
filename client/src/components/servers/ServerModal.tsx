@@ -12,6 +12,45 @@ interface ServerModalProps {
   initialTab?: 'create' | 'import';
 }
 
+/**
+ * Split an args string on spaces, keeping double-quoted segments together
+ * (e.g. --root "C:\Program Files\server"). Escaped quotes inside quoted
+ * segments become literal quotes. Returns null when quotes are unbalanced so
+ * the caller can fall back to the naive space split.
+ */
+const splitArgsRespectingQuotes = (input: string): string[] | null => {
+  const args: string[] = [];
+  let current = '';
+  let inQuote = false;
+  let tokenStarted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === '\\' && inQuote && input[i + 1] === '"') {
+      current += '"';
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inQuote = !inQuote;
+      tokenStarted = true;
+      continue;
+    }
+    if (ch === ' ' && !inQuote) {
+      if (current || tokenStarted) {
+        args.push(current);
+        current = '';
+        tokenStarted = false;
+      }
+      continue;
+    }
+    current += ch;
+    tokenStarted = true;
+  }
+  if (inQuote) return null;
+  if (current || tokenStarted) args.push(current);
+  return args;
+};
+
 export const ServerModal: React.FC<ServerModalProps> = ({
   isOpen,
   onClose,
@@ -33,8 +72,22 @@ export const ServerModal: React.FC<ServerModalProps> = ({
   const [selectedToImport, setSelectedToImport] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    if (!isOpen) return;
+    // Fresh state on every open so stale values/errors never leak across
+    // modal sessions.
     setTab(initialTab);
-  }, [initialTab]);
+    setName('');
+    setTransport('stdio');
+    setCommand('npx');
+    setArgsStr('-y @modelcontextprotocol/server-filesystem C:\\Users');
+    setUrl('http://localhost:8000/sse');
+    setEnvStr('');
+    setIsSubmitting(false);
+    setError(null);
+    setDetectedConfigs([]);
+    setIsLoadingDetected(false);
+    setSelectedToImport({});
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && tab === 'import') {
@@ -70,6 +123,37 @@ export const ServerModal: React.FC<ServerModalProps> = ({
       return;
     }
 
+    if (transport === 'sse') {
+      let urlOk = false;
+      try {
+        const parsedUrl = new URL(url);
+        urlOk = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+      } catch {
+        urlOk = false;
+      }
+      if (!urlOk) {
+        setError('Please provide a valid http(s) URL for the SSE endpoint');
+        return;
+      }
+    }
+
+    const trimmedArgs = argsStr.trim();
+    let args: string[];
+    if (trimmedArgs.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmedArgs);
+        if (!Array.isArray(parsed) || parsed.some((a) => typeof a !== 'string')) {
+          throw new Error('not a string array');
+        }
+        args = parsed;
+      } catch {
+        setError('Arguments must be a JSON array of strings, e.g. ["-y", "@server/filesystem"]');
+        return;
+      }
+    } else {
+      args = splitArgsRespectingQuotes(trimmedArgs) ?? trimmedArgs.split(' ').filter(Boolean);
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -86,11 +170,6 @@ export const ServerModal: React.FC<ServerModalProps> = ({
           });
         }
       }
-
-      const args = argsStr
-        .trim()
-        .split(' ')
-        .filter(Boolean);
 
       const created = await api.addServer({
         name,

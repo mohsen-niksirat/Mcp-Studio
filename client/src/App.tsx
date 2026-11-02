@@ -43,14 +43,20 @@ export const App: React.FC = () => {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<'create' | 'import'>('create');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [pendingTool, setPendingTool] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimer = useRef<number | null>(null);
+  const wsReconnectDelayRef = useRef(3000);
   const mountedRef = useRef(true);
+  const connectSeqRef = useRef(0);
+  const fetchInFlightRef = useRef(0);
   const fetchEntitiesRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const handleCrashRef = useRef<(serverId: string) => void>(() => {});
 
   const fetchActiveEntities = useCallback(async () => {
+    const seq = connectSeqRef.current;
+    fetchInFlightRef.current += 1;
     setIsLoadingEntities(true);
     try {
       const [toolList, resData, promptList] = await Promise.all([
@@ -58,6 +64,7 @@ export const App: React.FC = () => {
         api.listResources().catch(() => ({ resources: [], templates: [] })),
         api.listPrompts().catch(() => [])
       ]);
+      if (connectSeqRef.current !== seq) return;
       setTools(toolList);
       setResources(resData.resources || []);
       setTemplates(resData.templates || []);
@@ -65,7 +72,10 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error('Failed to fetch MCP entities:', e);
     } finally {
-      setIsLoadingEntities(false);
+      fetchInFlightRef.current -= 1;
+      if (fetchInFlightRef.current === 0) {
+        setIsLoadingEntities(false);
+      }
     }
   }, []);
 
@@ -153,10 +163,18 @@ export const App: React.FC = () => {
         }
       };
 
+      ws.onopen = () => {
+        // Successful connection: restore the fast reconnect cadence.
+        wsReconnectDelayRef.current = 3000;
+      };
+
       ws.onclose = () => {
         if (!mountedRef.current) return;
-        // Reconnect after 3 seconds (tracked so we can cancel on unmount).
-        wsReconnectTimer.current = window.setTimeout(connectWebSocket, 3000);
+        // Exponential backoff, capped at ~30s (tracked so we can cancel on
+        // unmount; reset on successful open above).
+        const delay = wsReconnectDelayRef.current;
+        wsReconnectDelayRef.current = Math.min(delay * 2, 30000);
+        wsReconnectTimer.current = window.setTimeout(connectWebSocket, delay);
       };
     } catch (e) {
       console.warn('[WebSocket] Connection failed', e);
@@ -186,15 +204,20 @@ export const App: React.FC = () => {
   };
 
   const handleConnect = async (id: string) => {
+    const seq = ++connectSeqRef.current;
     setIsConnecting(true);
     try {
       const state = await api.connect(id);
+      if (connectSeqRef.current !== seq) return;
       setActiveState(state);
       await fetchActiveEntities();
     } catch (e: any) {
+      if (connectSeqRef.current !== seq) return;
       console.error('Connection failed', e);
     } finally {
-      setIsConnecting(false);
+      if (connectSeqRef.current === seq) {
+        setIsConnecting(false);
+      }
     }
   };
 
@@ -212,7 +235,15 @@ export const App: React.FC = () => {
   };
 
   const handleServerAdded = (newConfig: ServerConfig) => {
-    setServers((prev) => [...prev, newConfig]);
+    // Merge by id: re-adding an existing server (e.g. a re-import) must
+    // replace it instead of appending a duplicate.
+    setServers((prev) => {
+      const idx = prev.findIndex((s) => s.id === newConfig.id);
+      if (idx === -1) return [...prev, newConfig];
+      const next = [...prev];
+      next[idx] = newConfig;
+      return next;
+    });
     handleConnect(newConfig.id);
   };
 
@@ -269,7 +300,13 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'tools' && (
-            <ToolsView tools={tools} isLoading={isLoadingEntities} activeState={activeState} />
+            <ToolsView
+              tools={tools}
+              isLoading={isLoadingEntities}
+              activeState={activeState}
+              pendingSelectTool={pendingTool}
+              onPendingToolConsumed={() => setPendingTool(null)}
+            />
           )}
 
           {activeTab === 'resources' && (
@@ -289,7 +326,11 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'traffic' && (
-            <TrafficView logs={logs} onClear={handleClearLogs} />
+            <TrafficView
+              logs={logs}
+              onClear={handleClearLogs}
+              activeServerId={activeState?.config.id}
+            />
           )}
 
           {activeTab === 'benchmark' && (
@@ -307,6 +348,10 @@ export const App: React.FC = () => {
           setIsCommandPaletteOpen(false);
         }}
         tools={tools}
+        onSelectTool={(toolName) => {
+          setPendingTool(toolName);
+          setActiveTab('tools');
+        }}
         onOpenAddServer={() => {
           setModalInitialTab('create');
           setIsServerModalOpen(true);

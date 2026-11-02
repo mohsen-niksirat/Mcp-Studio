@@ -27,10 +27,52 @@ interface ChatSandboxViewProps {
   tools: ToolItem[];
 }
 
+const DEFAULT_CHAT_CONFIG: ChatConfig = {
+  provider: 'mock' as AIProvider,
+  apiKey: '',
+  model: 'gemini-2.0-flash',
+  endpoint: 'http://localhost:11434/v1',
+  temperature: 0.7,
+  systemPrompt:
+    'You are an autonomous AI assistant powered by MCP-Studio. You have access to real-time tools. Use the provided tools whenever they help answer the user question accurately.'
+};
+
+const normalizeImportedMessages = (raw: any): ChatMessage[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m) => m && typeof m === 'object' && !Array.isArray(m))
+    .map((m) => {
+      const toolCalls = Array.isArray(m.toolCalls)
+        ? m.toolCalls
+            .filter((tc: any) => tc && typeof tc === 'object' && typeof tc.name === 'string')
+            .map((tc: any) => ({
+              ...tc,
+              id: typeof tc.id === 'string' && tc.id ? tc.id : crypto.randomUUID(),
+              args: tc.args && typeof tc.args === 'object' && !Array.isArray(tc.args) ? tc.args : {}
+            }))
+        : undefined;
+      return {
+        id: typeof m.id === 'string' && m.id ? m.id : crypto.randomUUID(),
+        role: m.role === 'user' || m.role === 'system' ? m.role : 'assistant',
+        content: typeof m.content === 'string' ? m.content : '',
+        timestamp:
+          typeof m.timestamp === 'number' && Number.isFinite(m.timestamp)
+            ? m.timestamp
+            : Date.now(),
+        ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {})
+      } as ChatMessage;
+    });
+};
+
 export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('mcp_studio_chat_history');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('mcp_studio_chat_history');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [input, setInput] = useState('');
@@ -39,30 +81,49 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
   const [expandedCalls, setExpandedCalls] = useState<Record<string, boolean>>({});
 
   const [config, setConfig] = useState<ChatConfig>(() => {
-    const saved = localStorage.getItem('mcp_studio_chat_config');
-    return saved
-      ? JSON.parse(saved)
-      : {
-          provider: 'mock' as AIProvider,
-          apiKey: '',
-          model: 'gemini-2.0-flash',
-          endpoint: 'http://localhost:11434/v1',
-          temperature: 0.7,
-          systemPrompt:
-            'You are an autonomous AI assistant powered by MCP-Studio. You have access to real-time tools. Use the provided tools whenever they help answer the user question accurately.'
-        };
+    try {
+      const saved = localStorage.getItem('mcp_studio_chat_config');
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { ...DEFAULT_CHAT_CONFIG, ...parsed };
+      }
+    } catch {
+      // Corrupted config: fall through to the defaults below.
+    }
+    return DEFAULT_CHAT_CONFIG;
   });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const historySaveTimerRef = useRef<number | null>(null);
+  const latestMessagesRef = useRef(messages);
 
   useEffect(() => {
     localStorage.setItem('mcp_studio_chat_config', JSON.stringify(config));
   }, [config]);
 
   useEffect(() => {
-    localStorage.setItem('mcp_studio_chat_history', JSON.stringify(messages));
+    latestMessagesRef.current = messages;
+    if (historySaveTimerRef.current !== null) {
+      window.clearTimeout(historySaveTimerRef.current);
+    }
+    historySaveTimerRef.current = window.setTimeout(() => {
+      historySaveTimerRef.current = null;
+      localStorage.setItem('mcp_studio_chat_history', JSON.stringify(messages));
+    }, 1000);
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (historySaveTimerRef.current !== null) {
+        window.clearTimeout(historySaveTimerRef.current);
+      }
+      localStorage.setItem(
+        'mcp_studio_chat_history',
+        JSON.stringify(latestMessagesRef.current)
+      );
+    };
+  }, []);
 
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || input).trim();
@@ -139,10 +200,12 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const imported = JSON.parse(event.target?.result as string);
-        if (Array.isArray(imported)) {
-          setMessages(imported);
+        const imported = normalizeImportedMessages(JSON.parse(event.target?.result as string));
+        if (imported.length === 0) {
+          alert('No valid chat messages found in file');
+          return;
         }
+        setMessages(imported);
       } catch {
         alert('Invalid chat history JSON file');
       }

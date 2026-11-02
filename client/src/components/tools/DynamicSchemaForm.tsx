@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ToolInputSchema } from '../../types';
 import { Code, Sliders, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/primitives';
@@ -21,8 +21,15 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
   const [mode, setMode] = useState<'form' | 'raw'>('form');
   const [rawJson, setRawJson] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
+  // Set while a raw-editor keystroke is propagating up through `values`, so
+  // the effect below does not rewrite the textarea under the caret.
+  const skipRawSyncRef = useRef(false);
 
   useEffect(() => {
+    if (skipRawSyncRef.current) {
+      skipRawSyncRef.current = false;
+      return;
+    }
     setRawJson(JSON.stringify(values, null, 2));
   }, [values]);
 
@@ -41,7 +48,12 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
     setRawJson(text);
     try {
       const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setJsonError('JSON must be an object');
+        return;
+      }
       setJsonError(null);
+      skipRawSyncRef.current = true;
       onChange(parsed);
     } catch (e: any) {
       setJsonError(e.message);

@@ -142,6 +142,33 @@ export class BrowserMCPAdapter {
     await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 20) + 5));
 
     let res: any;
+    try {
+      res = this.runMockTool(name, args);
+    } catch (err: any) {
+      this.addLog({
+        timestamp: Date.now(),
+        direction: 'incoming',
+        method: 'tools/call',
+        data: { error: err.message },
+        isError: true
+      });
+      throw err;
+    }
+
+    const latencyMs = Date.now() - start;
+    this.addLog({
+      timestamp: Date.now(),
+      direction: 'incoming',
+      method: 'tools/call',
+      data: res,
+      latencyMs
+    });
+
+    return { ...res, latencyMs };
+  }
+
+  private runMockTool(name: string, args: Record<string, any>): any {
+    let res: any;
     switch (name) {
       case 'math_calculator': {
         const { operation, a = 0, b = 0, roundDecimals = 2 } = args;
@@ -255,16 +282,7 @@ export class BrowserMCPAdapter {
         throw new Error(`Tool not found: ${name}`);
     }
 
-    const latencyMs = Date.now() - start;
-    this.addLog({
-      timestamp: Date.now(),
-      direction: 'incoming',
-      method: 'tools/call',
-      data: res,
-      latencyMs
-    });
-
-    return { ...res, latencyMs };
+    return res;
   }
 
   listResources(): { resources: ResourceItem[]; templates: ResourceTemplateItem[] } {

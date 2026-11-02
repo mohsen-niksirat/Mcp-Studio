@@ -629,37 +629,57 @@ export class ChatSandboxService {
     onProgress: (msg: ChatMessage) => void,
     baseUrl?: string
   ): Promise<ChatMessage> {
-    const tc = message.tool_calls[0];
-    const toolName = tc.function.name;
-    let args = {};
-    try {
-      args = JSON.parse(tc.function.arguments);
-    } catch {
-      args = {};
-    }
+    const rawCalls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    // Normalize ids up front so the role:'tool' replies reference the exact
+    // tool_call ids present in the assistant message pushed to history.
+    rawCalls.forEach((tc, i) => {
+      if (!tc.id) tc.id = `call-${Date.now()}-${i}`;
+    });
 
-    const toolCall: ChatToolCall = {
-      id: tc.id || `call-${Date.now()}`,
-      name: toolName,
-      args,
-      status: 'calling'
-    };
-    assistantMsg.toolCalls = [toolCall];
-    assistantMsg.content = `Calling tool: \`${toolName}\`...`;
+    const toolCalls: ChatToolCall[] = rawCalls.map((tc) => {
+      let args: Record<string, any> = {};
+      try {
+        args = JSON.parse(tc.function?.arguments ?? '{}');
+      } catch {
+        args = {};
+      }
+      return {
+        id: tc.id,
+        name: tc.function?.name || '',
+        args,
+        status: 'calling'
+      };
+    });
+
+    assistantMsg.toolCalls = toolCalls;
+    assistantMsg.content =
+      toolCalls.length === 1
+        ? `Calling tool: \`${toolCalls[0].name}\`...`
+        : `Calling ${toolCalls.length} tools: ${toolCalls
+            .map((c) => `\`${c.name}\``)
+            .join(', ')}...`;
     onProgress({ ...assistantMsg });
 
     try {
-      const toolResult = await api.callTool(toolName, args);
-      toolCall.status = 'success';
-      toolCall.result = toolResult;
+      const outputs: string[] = [];
+      for (const toolCall of toolCalls) {
+        const toolResult = await api.callTool(toolCall.name, toolCall.args);
+        toolCall.status = 'success';
+        toolCall.result = toolResult;
+        outputs.push(
+          toolResult.content?.[0]?.text ||
+            JSON.stringify(toolResult.structuredData || toolResult)
+        );
+      }
 
-      const outputStr =
-        toolResult.content?.[0]?.text || JSON.stringify(toolResult.structuredData || toolResult);
+      const combinedOutput = outputs.join('\n\n');
       messages.push(message);
-      messages.push({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: outputStr
+      rawCalls.forEach((tc, i) => {
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: outputs[i]
+        });
       });
 
       // Second turn
@@ -671,13 +691,17 @@ export class ChatSandboxService {
 
       if (secondRes.ok) {
         const secondData = await secondRes.json();
-        assistantMsg.content = secondData.choices?.[0]?.message?.content || outputStr;
+        assistantMsg.content = secondData.choices?.[0]?.message?.content || combinedOutput;
       } else {
-        assistantMsg.content = outputStr;
+        assistantMsg.content = combinedOutput;
       }
     } catch (err: any) {
-      toolCall.status = 'error';
-      toolCall.error = err.message;
+      toolCalls.forEach((toolCall) => {
+        if (toolCall.status === 'calling') {
+          toolCall.status = 'error';
+          toolCall.error = err.message;
+        }
+      });
       assistantMsg.content = `Tool execution failed: ${err.message}`;
     }
 

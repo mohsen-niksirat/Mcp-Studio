@@ -22,6 +22,8 @@ interface ToolsViewProps {
   tools: ToolItem[];
   isLoading: boolean;
   activeState?: ServerState | null;
+  pendingSelectTool?: string | null;
+  onPendingToolConsumed?: () => void;
 }
 
 interface ExecutionHistoryItem {
@@ -34,7 +36,13 @@ interface ExecutionHistoryItem {
   timestamp: number;
 }
 
-export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeState }) => {
+export const ToolsView: React.FC<ToolsViewProps> = ({
+  tools,
+  isLoading,
+  activeState,
+  pendingSelectTool,
+  onPendingToolConsumed
+}) => {
   const [selectedTool, setSelectedTool] = useState<ToolItem | null>(tools[0] || null);
   const [search, setSearch] = useState('');
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -46,16 +54,19 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeSt
   const [activeResultTab, setActiveResultTab] = useState<'formatted' | 'structured' | 'raw'>('formatted');
   const [history, setHistory] = useState<ExecutionHistoryItem[]>([]);
   const [isSnippetOpen, setIsSnippetOpen] = useState(false);
+  const executeSeqRef = React.useRef(0);
 
   // Keep selected tool in sync with the live catalog: drop the selection if
   // the tool disappears (server switch / disconnect) and pick the first tool
   // when nothing valid is selected.
   React.useEffect(() => {
     if (tools.length === 0) {
+      executeSeqRef.current += 1;
       setSelectedTool(null);
       return;
     }
     if (!selectedTool || !tools.some((t) => t.name === selectedTool.name)) {
+      executeSeqRef.current += 1;
       setSelectedTool(tools[0]);
     }
   }, [tools, selectedTool]);
@@ -67,6 +78,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeSt
   );
 
   const handleSelectTool = (t: ToolItem) => {
+    executeSeqRef.current += 1;
     setSelectedTool(t);
     setFormValues({});
     setLastResult(null);
@@ -74,14 +86,25 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeSt
     setLastLatency(null);
   };
 
+  // A tool picked from the command palette (or another view) lands here.
+  React.useEffect(() => {
+    if (!pendingSelectTool) return;
+    const match = tools.find((t) => t.name === pendingSelectTool);
+    if (match) handleSelectTool(match);
+    onPendingToolConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSelectTool]);
+
   const handleExecute = async () => {
     if (!selectedTool) return;
+    const requestId = ++executeSeqRef.current;
     setIsExecuting(true);
     setLastError(null);
     const start = Date.now();
 
     try {
       const res = await api.callTool(selectedTool.name, formValues);
+      if (executeSeqRef.current !== requestId) return;
       const latency =
         res.latencyMs !== undefined ? res.latencyMs : Date.now() - start;
       setLastResult(res);
@@ -97,10 +120,13 @@ export const ToolsView: React.FC<ToolsViewProps> = ({ tools, isLoading, activeSt
       };
       setHistory((prev) => [historyItem, ...prev.slice(0, 19)]);
     } catch (err: any) {
+      if (executeSeqRef.current !== requestId) return;
       setLastError(err.message || 'Execution failed');
       setLastLatency(Date.now() - start);
     } finally {
-      setIsExecuting(false);
+      if (executeSeqRef.current === requestId) {
+        setIsExecuting(false);
+      }
     }
   };
 

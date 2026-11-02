@@ -22,6 +22,30 @@ interface CollectionsViewProps {
   tools: ToolItem[];
 }
 
+const normalizeImportedSuites = (raw: any): TestSuite[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s) => s && typeof s === 'object' && !Array.isArray(s))
+    .map((s) => ({
+      id: typeof s.id === 'string' && s.id ? s.id : crypto.randomUUID(),
+      name: typeof s.name === 'string' && s.name ? s.name : 'Imported Suite',
+      description: typeof s.description === 'string' ? s.description : undefined,
+      steps: Array.isArray(s.steps)
+        ? s.steps
+            .filter((st: any) => st && typeof st === 'object' && typeof st.toolName === 'string')
+            .map((st: any) => ({
+              id: typeof st.id === 'string' && st.id ? st.id : crypto.randomUUID(),
+              toolName: st.toolName,
+              args: st.args && typeof st.args === 'object' && !Array.isArray(st.args) ? st.args : {},
+              expectedSubstring:
+                typeof st.expectedSubstring === 'string' && st.expectedSubstring
+                  ? st.expectedSubstring
+                  : undefined
+            }))
+        : []
+    }));
+};
+
 export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
   const [suites, setSuites] = useState<TestSuite[]>(() => {
     const saved = localStorage.getItem('mcp_studio_test_suites');
@@ -82,7 +106,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
       description: 'Automated sequential execution scenario',
       steps: []
     };
-    setSuites([...suites, newSuite]);
+    setSuites((prev) => [...prev, newSuite]);
     setSelectedSuiteId(newSuite.id);
   };
 
@@ -109,8 +133,8 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
       expectedSubstring: newStepAssert.trim() || undefined
     };
 
-    setSuites(
-      suites.map((s) =>
+    setSuites((prev) =>
+      prev.map((s) =>
         s.id === selectedSuite.id ? { ...s, steps: [...s.steps, newStep] } : s
       )
     );
@@ -121,8 +145,8 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
 
   const handleDeleteStep = (stepId: string) => {
     if (!selectedSuite) return;
-    setSuites(
-      suites.map((s) =>
+    setSuites((prev) =>
+      prev.map((s) =>
         s.id === selectedSuite.id
           ? { ...s, steps: s.steps.filter((st) => st.id !== stepId) }
           : s
@@ -182,8 +206,8 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
     setActiveStepRunning(null);
     setIsRunning(false);
 
-    setSuites(
-      suites.map((s) =>
+    setSuites((prev) =>
+      prev.map((s) =>
         s.id === selectedSuite.id
           ? {
               ...s,
@@ -215,11 +239,13 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const imported = JSON.parse(event.target?.result as string);
-        if (Array.isArray(imported)) {
-          setSuites(imported);
-          if (imported[0]?.id) setSelectedSuiteId(imported[0].id);
+        const imported = normalizeImportedSuites(JSON.parse(event.target?.result as string));
+        if (imported.length === 0) {
+          alert('No valid test suites found in file');
+          return;
         }
+        setSuites(imported);
+        setSelectedSuiteId(imported[0].id);
       } catch {
         alert('Invalid JSON collection file');
       }

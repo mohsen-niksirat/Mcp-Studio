@@ -16,6 +16,16 @@ type Lang = 'python' | 'typescript' | 'curl' | 'go';
 
 const REMOTE_TRANSPORTS = new Set(['sse', 'streamable-http']);
 
+// Escape a value embedded in a double-quoted string literal (Python/TS/Go).
+const escapeDoubleQuotedLiteral = (value: string): string =>
+  value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+// Escape a value embedded in a POSIX shell single-quoted argument.
+const escapeShellSingleQuoted = (value: string): string => value.replace(/'/g, `'\\''`);
+
+// Escape a value embedded in a POSIX shell double-quoted argument.
+const escapeShellDoubleQuoted = (value: string): string => value.replace(/"/g, '\\"');
+
 export const CodeSnippetModal: React.FC<CodeSnippetModalProps> = ({
   isOpen,
   onClose,
@@ -59,7 +69,7 @@ async def call_tool():
             headers={**HEADERS, "mcp-session-id": session_id or ""},
             json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                "params": {"name": "${tool.name}", "arguments": ${argsJson}}
+                "params": {"name": "${escapeDoubleQuotedLiteral(tool.name)}", "arguments": ${argsJson}}
             }
         )
         print(result.json())
@@ -81,7 +91,7 @@ async def run():
 
             # Call MCP Tool: ${tool.name}
             result = await session.call_tool(
-                name="${tool.name}",
+                name="${escapeDoubleQuotedLiteral(tool.name)}",
                 arguments=${argsJson}
             )
             print(result)
@@ -107,7 +117,7 @@ async function main() {
 
   // Call MCP Tool: ${tool.name}
   const result = await client.callTool({
-    name: "${tool.name}",
+    name: "${escapeDoubleQuotedLiteral(tool.name)}",
     arguments: ${argsJson}
   });
 
@@ -129,7 +139,7 @@ async function main() {
 
   // Call MCP Tool: ${tool.name}
   const result = await client.callTool({
-    name: "${tool.name}",
+    name: "${escapeDoubleQuotedLiteral(tool.name)}",
     arguments: ${argsJson}
   });
 
@@ -142,24 +152,28 @@ main().catch(console.error);
 curl -X POST ${remoteUrl} \\
   -H "Content-Type: application/json" \\${
     headerEntries.length > 0
-      ? headerEntries.map(([k, v]) => `
-  -H "${k}: ${v}" \\`).join('')
+      ? headerEntries.map(
+          ([k, v]) => `
+  -H "${escapeShellDoubleQuoted(k)}: ${escapeShellDoubleQuoted(v)}" \\`
+        ).join('')
       : ''
   }
-  -d '${JSON.stringify(
-    {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: tool.name, arguments: args }
-    },
-    null,
-    2
+  -d '${escapeShellSingleQuoted(
+    JSON.stringify(
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: tool.name, arguments: args }
+      },
+      null,
+      2
+    )
   )}'
 ` : `# Direct JSON-RPC call via the MCP-Studio bridge API
 curl -X POST http://localhost:4999/api/servers/active/tools/call \\
   -H "Content-Type: application/json" \\
-  -d '${JSON.stringify({ name: tool.name, arguments: args }, null, 2)}'
+  -d '${escapeShellSingleQuoted(JSON.stringify({ name: tool.name, arguments: args }, null, 2))}'
 `,
     go: `package main
 
@@ -178,7 +192,7 @@ func main() {
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name":      "${tool.name}",
+			"name":      "${escapeDoubleQuotedLiteral(tool.name)}",
 			"arguments": ${argsJson},
 		},
 	}

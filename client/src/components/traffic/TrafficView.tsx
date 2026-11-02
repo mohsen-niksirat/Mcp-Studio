@@ -19,21 +19,25 @@ import { cn } from '../../lib/cn';
 interface TrafficViewProps {
   logs: JsonRpcMessageLog[];
   onClear: () => void;
+  /** Identity of the active server; changing it invalidates the history backfill. */
+  activeServerId?: string;
 }
 
 /** Max rows rendered at once — beyond this the list is windowed. */
 const RENDER_WINDOW = 200;
 
-export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
+export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear, activeServerId }) => {
   const [selectedLog, setSelectedLog] = useState<JsonRpcMessageLog | null>(
     logs[logs.length - 1] || null
   );
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [errorOnly, setErrorOnly] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [serverLogs, setServerLogs] = useState<JsonRpcMessageLog[] | null>(null);
+  /** Older frames fetched once from /api/logs; live appends come via WebSocket. */
+  const [historicalLogs, setHistoricalLogs] = useState<JsonRpcMessageLog[] | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   /** How many frames the server-side query should return. */
   const [logLimit, setLogLimit] = useState(500);
@@ -48,28 +52,32 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     }
   }, [logs, isPaused, selectedLog]);
 
-  // Server-side filtering: when the backend is reachable, query /api/logs
-  // with the filters so long histories do not travel in full. Falls back to
-  // the live WebSocket log buffer (client-side filtering) on any failure or
-  // in standalone web mode.
+  // Debounce the text filter so typing does not re-filter the whole buffer
+  // on every keystroke.
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 200);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
+  // Backfill older history from the server once (and when the limit or the
+  // active server changes). Live appends arrive through the WebSocket 'log'
+  // events in the logs prop; filtering happens in-memory, so incoming frames
+  // never trigger refetches.
   React.useEffect(() => {
     if (api.isWebStandalone()) {
-      setServerLogs(null);
+      setHistoricalLogs(null);
       return;
     }
     let cancelled = false;
+    setHistoricalLogs(null);
     setIsFetching(true);
     api
-      .getLogs(logLimit, {
-        direction: directionFilter === 'all' ? undefined : directionFilter,
-        method: search || undefined,
-        errorsOnly: errorOnly
-      })
-      .then((logs) => {
-        if (!cancelled) setServerLogs(logs);
+      .getLogs(logLimit)
+      .then((fetched) => {
+        if (!cancelled) setHistoricalLogs(fetched);
       })
       .catch(() => {
-        if (!cancelled) setServerLogs(null);
+        if (!cancelled) setHistoricalLogs(null);
       })
       .finally(() => {
         if (!cancelled) setIsFetching(false);
@@ -77,24 +85,23 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     return () => {
       cancelled = true;
     };
-  }, [directionFilter, search, errorOnly, logLimit, logs.length]);
+  }, [logLimit, activeServerId]);
 
-  const baseLogs = serverLogs ?? logs;
+  const baseLogs = React.useMemo(() => {
+    if (!historicalLogs || historicalLogs.length === 0) return logs;
+    const liveIds = new Set(logs.map((l) => l.id));
+    const older = historicalLogs.filter((l) => !liveIds.has(l.id));
+    return [...older, ...logs];
+  }, [historicalLogs, logs]);
 
   const filteredLogs = baseLogs.filter((l) => {
-    if (serverLogs === null) {
-      // Client-side filtering path (live buffer / standalone mode).
-      if (directionFilter !== 'all' && l.direction !== directionFilter) return false;
-      if (errorOnly && !l.isError) return false;
-      if (!search) return true;
-      const matchMethod = l.method?.toLowerCase().includes(search.toLowerCase());
-      const matchData = JSON.stringify(l.data).toLowerCase().includes(search.toLowerCase());
-      return matchMethod || matchData;
-    }
-    // Server already applied direction/method/error filters; keep only the
-    // full-payload text search client-side.
-    if (!search) return true;
-    return JSON.stringify(l.data).toLowerCase().includes(search.toLowerCase());
+    if (directionFilter !== 'all' && l.direction !== directionFilter) return false;
+    if (errorOnly && !l.isError) return false;
+    if (!debouncedSearch) return true;
+    const needle = debouncedSearch.toLowerCase();
+    const matchMethod = l.method?.toLowerCase().includes(needle);
+    const matchData = JSON.stringify(l.data).toLowerCase().includes(needle);
+    return matchMethod || matchData;
   });
 
   // Windowing: render at most the newest RENDER_WINDOW rows; older frames
@@ -105,6 +112,11 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleClear = () => {
+    setHistoricalLogs(null);
+    onClear();
   };
 
   return (
@@ -138,7 +150,7 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear }) => {
               )}
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={onClear} title="Clear logs">
+            <Button variant="ghost" size="icon" onClick={handleClear} title="Clear logs">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>

@@ -31,6 +31,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   onSelectTab,
   tools,
+  onSelectTool,
   onOpenAddServer,
   onOpenImport,
   onClearLogs
@@ -76,7 +77,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       type: 'MCP Tool',
       icon: Wrench,
       action: () => {
-        onSelectTab('tools');
+        if (onSelectTool) {
+          onSelectTool(t.name);
+        } else {
+          onSelectTab('tools');
+        }
       }
     }))
   ];
