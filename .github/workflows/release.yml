@@ -48,6 +48,12 @@ jobs:
       - name: Build Full Stack (Client & Server)
         run: pnpm build
 
+      # The release archive ships without node_modules, so the server must be
+      # a single self-contained bundle (all runtime deps inlined) or
+      # `node server/dist/index.js` fails with "Cannot find module 'express'".
+      - name: Bundle server into a self-contained file
+        run: pnpm --filter mcp-studio-server build:bundle
+
       - name: Build Windows Desktop Executable
         run: |
           mkdir -p dist

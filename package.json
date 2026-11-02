@@ -1,6 +1,6 @@
 {
   "name": "mcp-studio",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "The visual IDE and testing studio for Model Context Protocol (MCP) servers.",
   "type": "module",
   "bin": {

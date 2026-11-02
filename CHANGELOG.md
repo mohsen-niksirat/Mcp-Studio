@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-11-02
+
+### Fixed
+- **Windows release archive was broken**: the desktop zip shipped
+  `server/dist` without `node_modules`, so the launcher's
+  `node server/dist/index.js` failed with `Cannot find module 'express'`
+  and the app opened an error page. The release build now bundles the
+  server into a single self-contained `index.js` (all runtime
+  dependencies inlined via esbuild), so the archive runs with nothing but
+  Node.js installed. v1.5.1 archives are affected — use this release.
+
+## [1.5.2] - 2026-11-02
+
+### Fixed
+- **Release archive was broken**: the Windows desktop package shipped
+  `server/dist` without `node_modules`, so `MCP-Studio.exe` launched a
+  server that died instantly with `Cannot find module 'express'` and the
+  browser opened an error page. The release build now bundles the backend
+  into a single self-contained `server/dist/index.js` (esbuild, all runtime
+  dependencies inlined) — the desktop app works out of the box with only
+  Node.js installed. (The v1.5.1 archive has the same defect; use v1.5.2.)
+
 ## [1.5.1] - 2026-11-02
 
 ### Security
