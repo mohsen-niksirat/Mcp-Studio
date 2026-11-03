@@ -48,7 +48,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
       </div>
       <div className={cn('text-2xl font-bold font-mono', metricTones[tone])}>
         {value}
-        {unit && <span className="text-xs text-slate-500 font-normal ml-1">{unit}</span>}
+        {unit && <span className="text-xs text-slate-400 font-normal ml-1">{unit}</span>}
       </div>
     </CardBody>
   </Card>
@@ -86,9 +86,9 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => 
               Benchmark & Health
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Measure JSON-RPC roundtrip latency, jitter, and protocol compliance
-            of the active server.
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Measure JSON-RPC roundtrip latency across repeated calls against
+            the active server.
           </p>
         </div>
 
@@ -172,7 +172,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => 
                 <div className="text-sm font-semibold text-emerald-400 capitalize">
                   {activeState?.status}
                 </div>
-                <div className="text-[11px] font-mono text-slate-500">
+                <div className="text-[11px] font-mono text-slate-400">
                   Since{' '}
                   {activeState?.connectedAt
                     ? new Date(activeState.connectedAt).toLocaleTimeString()
@@ -246,7 +246,7 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => 
                           key={i}
                           className="flex items-center gap-3 text-xs font-mono"
                         >
-                          <span className="text-slate-500 w-8">#{i + 1}</span>
+                          <span className="text-slate-400 w-8">#{i + 1}</span>
                           <div className="flex-1 bg-surface-800/80 rounded-full h-1.5 overflow-hidden">
                             <div
                               className={cn(
@@ -273,46 +273,62 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({ activeState }) => 
             </div>
           )}
 
-          {/* Conformance */}
+          {/* Session facts: only values the app actually knows (R-36 — the
+              previous card showed hardcoded "conformance" checks that were
+              never measured). */}
           <Card>
             <CardBody className="space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-                <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <span>MCP Protocol Conformance</span>
+                <ShieldCheck className="h-4 w-4 text-brand-400" />
+                <span>Session</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
                   {
-                    title: 'JSON-RPC 2.0 Compliance',
-                    desc: 'Strict version field, unique request IDs.'
+                    title: 'Transport',
+                    value: activeState?.config.transport || 'unknown',
+                    mono: true
                   },
                   {
-                    title: 'Initialize Handshake',
-                    desc: 'Negotiated protocol version and capabilities.'
+                    title: 'Negotiated protocol',
+                    value: activeState?.serverInfo?.protocolVersion || 'not reported',
+                    mono: true
                   },
                   {
-                    title: 'Tools Schema Draft-07',
-                    desc: 'Input schemas conform to valid JSON Schema.'
+                    title: 'Server',
+                    value: activeState?.serverInfo?.name
+                      ? `${activeState.serverInfo.name} v${activeState.serverInfo.version || '?'}`
+                      : activeState?.config.name || 'unknown',
+                    mono: false
                   },
                   {
-                    title: 'Bi-directional Notifications',
-                    desc: 'Async progress and list-change signals.'
+                    title: 'Connected since',
+                    value: activeState?.connectedAt
+                      ? new Date(activeState.connectedAt).toLocaleTimeString()
+                      : 'N/A',
+                    mono: true
                   }
                 ].map((item) => (
                   <div
                     key={item.title}
-                    className="flex items-start gap-2 text-xs p-3 bg-surface-900/60 border border-surface-800/60 rounded-lg"
+                    className="flex items-center justify-between gap-3 text-xs p-3 bg-surface-900/60 border border-surface-800/60 rounded-lg"
                   >
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-slate-200">{item.title}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {item.desc}
-                      </div>
-                    </div>
+                    <span className="text-slate-400">{item.title}</span>
+                    <span
+                      className={cn(
+                        'text-slate-200 truncate',
+                        item.mono && 'font-mono'
+                      )}
+                    >
+                      {item.value}
+                    </span>
                   </div>
                 ))}
               </div>
+              <p className="text-[11px] text-slate-400">
+                The benchmark measures JSON-RPC roundtrip latency only; it does
+                not certify protocol conformance.
+              </p>
             </CardBody>
           </Card>
         </>

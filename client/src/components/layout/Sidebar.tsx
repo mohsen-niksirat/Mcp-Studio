@@ -6,7 +6,7 @@ import {
   FolderArchive,
   Layers,
   ListChecks,
-  Sparkles,
+  MessageSquareText,
   Wrench,
   Zap
 } from 'lucide-react';
@@ -25,12 +25,14 @@ interface SidebarProps {
   onOpenImport: () => void;
 }
 
-const navItems = [
+// Icon semantics are documented in DESIGN.md; every glyph maps to what the
+// tab actually does. Exported so the narrow-viewport tab strip in App.tsx
+// renders the exact same navigation.
+export const NAV_ITEMS = [
   {
     id: 'chat' as ActiveTab,
     label: 'AI Chat Sandbox',
     icon: Bot,
-    badgeLabel: 'AI',
     description: 'Natural-language tool testing'
   },
   {
@@ -50,7 +52,7 @@ const navItems = [
   {
     id: 'prompts' as ActiveTab,
     label: 'Prompts',
-    icon: Sparkles,
+    icon: MessageSquareText,
     badgeKey: 'prompts',
     description: 'Inspect prompt templates'
   },
@@ -71,7 +73,7 @@ const navItems = [
     id: 'benchmark' as ActiveTab,
     label: 'Benchmark',
     icon: Zap,
-    description: 'Latency and conformance'
+    description: 'Latency measurement'
   }
 ];
 
@@ -93,10 +95,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-60 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+    <aside className="hidden md:flex w-60 border-r border-surface-800 bg-surface-950 flex-col shrink-0">
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto" aria-label="Workspaces">
         <div className="px-3 py-2 section-label">Workspaces</div>
-        {navItems.map((item) => {
+        {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           const count = item.badgeKey ? badgeCount[item.badgeKey] : undefined;
@@ -105,9 +107,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
                 'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
                 isActive
                   ? 'bg-brand-600/15 text-brand-300'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
@@ -117,7 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Icon
                   className={cn(
                     'h-4 w-4 shrink-0',
-                    isActive ? 'text-brand-400' : 'text-slate-500'
+                    isActive ? 'text-brand-400' : 'text-slate-400'
                   )}
                 />
                 <span className="truncate">{item.label}</span>
@@ -125,11 +127,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {count !== undefined && count > 0 && (
                 <Badge tone={isActive ? 'brand' : 'neutral'}>
                   {count}
-                </Badge>
-              )}
-              {item.badgeLabel && (
-                <Badge tone="brand" className="uppercase">
-                  {item.badgeLabel}
                 </Badge>
               )}
             </button>
@@ -158,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {activeState.config.transport}
               </Badge>
             </div>
-            <div className="text-[10px] font-mono text-slate-500">
+            <div className="text-[10px] font-mono text-slate-400">
               {activeState.serverInfo?.protocolVersion
                 ? `MCP ${activeState.serverInfo.protocolVersion}`
                 : 'Protocol 2024-11-05'}

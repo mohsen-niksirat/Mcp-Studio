@@ -529,7 +529,7 @@ export class ChatSandboxService {
    * Consume a Gemini SSE stream (`streamGenerateContent?alt=sse` frames
    * relayed by the proxy). Each `data:` frame carries a partial
    * GenerateContentResponse whose text parts are appended token by token.
-   * Returns null — triggering the non-streaming fallback — when the stream
+   * Returns null to trigger the non-streaming fallback when the stream
    * is not SSE, when a function call is detected (the classic tool-call path
    * owns those), or when no text was produced.
    */

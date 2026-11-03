@@ -31,8 +31,11 @@ describe('App', () => {
   it('renders the navigation sidebar without crashing in standalone mode', async () => {
     render(<App />);
 
-    expect(await screen.findByText('Tools Runner')).toBeTruthy();
-    expect(screen.getByText('Resources')).toBeTruthy();
-    expect(screen.getByText('Protocol Inspector')).toBeTruthy();
+    // The desktop sidebar and the narrow-viewport tab strip both render the
+    // same labels (the strip is hidden by CSS on wide screens); assert that
+    // each workspace label exists at least once.
+    expect((await screen.findAllByText('Tools Runner')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Resources').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Protocol Inspector').length).toBeGreaterThan(0);
   });
 });

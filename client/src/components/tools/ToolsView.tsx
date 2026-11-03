@@ -139,7 +139,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
+        <div className="flex flex-col items-center gap-3 text-slate-400">
           <Spinner />
           <span className="text-xs font-mono">Loading tools...</span>
         </div>
@@ -158,18 +158,19 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
       {/* Tool list */}
-      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+      <div className="w-full lg:w-72 max-h-56 lg:max-h-none border-b lg:border-b-0 lg:border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
         <div className="p-3 border-b border-surface-800">
           <div className="relative">
-            <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search tools..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+              aria-label="Search tools"
+              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
             />
           </div>
         </div>
@@ -181,6 +182,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
               <button
                 key={t.name}
                 onClick={() => handleSelectTool(t)}
+                aria-current={isSelected ? 'true' : undefined}
                 className={cn(
                   'w-full text-left p-2.5 rounded-lg transition-colors',
                   isSelected
@@ -192,7 +194,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                   <Wrench
                     className={cn(
                       'h-3.5 w-3.5 shrink-0',
-                      isSelected ? 'text-brand-400' : 'text-slate-500'
+                      isSelected ? 'text-brand-400' : 'text-slate-400'
                     )}
                   />
                   <span className="font-mono text-xs font-semibold truncate">
@@ -200,7 +202,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                   </span>
                 </div>
                 {t.description && (
-                  <p className="text-[11px] text-slate-500 truncate mt-1 pl-5">
+                  <p className="text-[11px] text-slate-400 truncate mt-1 pl-5">
                     {t.description}
                   </p>
                 )}
@@ -211,9 +213,9 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
       </div>
 
       {selectedTool && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* Schema form */}
-          <div className="w-96 border-r border-surface-800 p-5 overflow-y-auto bg-surface-950 shrink-0">
+          <div className="w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-surface-800 p-4 lg:p-5 overflow-y-auto bg-surface-950 shrink-0">
             <div className="mb-5 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
@@ -235,7 +237,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                 </Button>
               </div>
               {selectedTool.description && (
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-400 leading-relaxed">
                   {selectedTool.description}
                 </p>
               )}
@@ -324,7 +326,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
 
             <div className="flex-1 p-5 overflow-y-auto">
               {isExecuting ? (
-                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
                   <Spinner />
                   <span className="text-xs font-mono">
                     Calling {selectedTool.name}...
@@ -382,7 +384,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                     <RotateCcw className="h-3 w-3 text-brand-400" />
                     <span>Recent Runs</span>
                   </span>
-                  <span className="text-[11px] font-mono text-slate-500">
+                  <span className="text-[11px] font-mono text-slate-400">
                     {history.length} runs
                   </span>
                 </div>
@@ -401,7 +403,7 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
                       <div className="font-mono text-[11px] text-brand-300">
                         {item.toolName}
                       </div>
-                      <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                         <span>{item.latencyMs}ms</span>
                         <span>·</span>
                         <span>

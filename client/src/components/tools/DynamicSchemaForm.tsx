@@ -121,7 +121,7 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
           )}
         </div>
       ) : propertyKeys.length === 0 ? (
-        <div className="p-4 bg-surface-900/40 border border-surface-800 rounded-lg text-center text-xs text-slate-500">
+        <div className="p-4 bg-surface-900/40 border border-surface-800 rounded-lg text-center text-xs text-slate-400">
           This tool does not take any input parameters.
         </div>
       ) : (
@@ -146,13 +146,13 @@ export const DynamicSchemaForm: React.FC<DynamicSchemaFormProps> = ({
                       </span>
                     )}
                   </label>
-                  <span className="text-[10px] font-mono text-slate-500">
+                  <span className="text-[10px] font-mono text-slate-400">
                     {prop.type || (prop.enum ? 'enum' : 'any')}
                   </span>
                 </div>
 
                 {prop.description && (
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
                     {prop.description}
                   </p>
                 )}

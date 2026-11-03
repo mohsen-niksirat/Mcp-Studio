@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Send,
   Sliders,
-  Sparkles,
   Trash2,
   Upload,
   User,
@@ -248,7 +247,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
               </span>
               <Badge tone="brand">{providerLabel}</Badge>
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-400">
               Natural-language agent testing with automatic MCP tool invocation
             </p>
           </div>
@@ -376,14 +375,14 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
       <div className="flex-1 p-5 overflow-y-auto space-y-5">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto space-y-4">
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-lg shadow-brand-600/20">
-              <Sparkles className="h-6 w-6 text-white" />
+            <div className="h-12 w-12 rounded-2xl bg-surface-900 border border-surface-800 flex items-center justify-center">
+              <Bot className="h-6 w-6 text-brand-400" />
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-100">
                 Welcome to AI Chat Sandbox
               </h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                 Test your MCP tools with an autonomous AI agent. Type a question
                 or pick a suggestion below.
               </p>
@@ -462,9 +461,9 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
                                   <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
                                 )}
                                 {isExpanded ? (
-                                  <ChevronUp className="h-3.5 w-3.5 text-slate-500" />
+                                  <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
                                 ) : (
-                                  <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                                 )}
                               </div>
                             </button>
@@ -472,7 +471,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
                             {isExpanded && (
                               <div className="p-3 border-t border-surface-800 space-y-2 bg-surface-950/60 font-mono text-xs">
                                 <div>
-                                  <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
                                     Arguments
                                   </div>
                                   <pre className="p-2 bg-surface-900 rounded-md text-slate-300 overflow-x-auto text-[11px]">
@@ -482,7 +481,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
 
                                 {tc.result && (
                                   <div>
-                                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">
                                       Result
                                     </div>
                                     <pre className="p-2 bg-surface-900 rounded-md text-brand-300 overflow-x-auto text-[11px]">
@@ -509,7 +508,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
                     <div className="whitespace-pre-wrap">{m.content}</div>
                   </div>
 
-                  <div className="text-[10px] text-slate-500 font-mono px-1">
+                  <div className="text-[10px] text-slate-400 font-mono px-1">
                     {new Date(m.timestamp).toLocaleTimeString()}
                   </div>
                 </div>
@@ -535,7 +534,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Ask the AI agent to execute tools from ${tools.length} active MCP capabilities...`}
-            className="w-full bg-surface-900 border border-surface-800 rounded-xl px-4 py-2.5 pr-12 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
+            className="w-full bg-surface-900 border border-surface-800 rounded-xl px-4 py-2.5 pr-12 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
           />
           <Button
             size="icon"
@@ -549,7 +548,7 @@ export const ChatSandboxView: React.FC<ChatSandboxViewProps> = ({ tools }) => {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 font-mono">
+        <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 font-mono">
           <span>Enter to send · Shift+Enter for a new line</span>
           <span className="flex items-center gap-1">
             <Wrench className="h-3 w-3 text-brand-400" />

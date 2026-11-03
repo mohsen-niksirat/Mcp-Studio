@@ -10,6 +10,8 @@ import {
   ActiveTab
 } from './types';
 import { api } from './lib/api';
+import { cn } from './lib/cn';
+import { Button } from './components/ui/primitives';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { ToolsView } from './components/tools/ToolsView';
@@ -21,6 +23,8 @@ import { ChatSandboxView } from './components/chat/ChatSandboxView';
 import { CollectionsView } from './components/collections/CollectionsView';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { ServerModal } from './components/servers/ServerModal';
+import { NAV_ITEMS } from './components/layout/Sidebar';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [servers, setServers] = useState<ServerConfig[]>([]);
@@ -44,6 +48,9 @@ export const App: React.FC = () => {
   const [modalInitialTab, setModalInitialTab] = useState<'create' | 'import'>('create');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [pendingTool, setPendingTool] = useState<string | null>(null);
+  // Surfaced when the backend itself cannot be reached (distinct from
+  // "no tools on the active server").
+  const [backendError, setBackendError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimer = useRef<number | null>(null);
@@ -183,6 +190,7 @@ export const App: React.FC = () => {
 
   const loadServers = async () => {
     setIsLoadingServers(true);
+    setBackendError(null);
     try {
       const data = await api.getServers();
       setServers(data.servers);
@@ -196,7 +204,10 @@ export const App: React.FC = () => {
         const demo = data.servers.find((s) => s.id === 'demo-mock-server') || data.servers[0];
         handleConnect(demo.id);
       }
-    } catch (e) {
+    } catch (e: any) {
+      // The backend exists as a process but every probe failed: say so
+      // instead of leaving the user with silent empty panes.
+      setBackendError(e?.message || 'Cannot reach the MCP-Studio backend.');
       console.error(e);
     } finally {
       setIsLoadingServers(false);
@@ -275,6 +286,55 @@ export const App: React.FC = () => {
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isConnecting={isConnecting}
       />
+
+      {/* Backend unreachable: visible app-level error state (R-27) */}
+      {backendError && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 px-4 py-2.5 bg-rose-950/30 border-b border-rose-500/25 text-sm"
+        >
+          <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+          <span className="text-rose-200 min-w-0">
+            {backendError} Start the backend (`pnpm dev`) or the desktop launcher, then retry.
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto shrink-0"
+            onClick={loadServers}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Retry</span>
+          </Button>
+        </div>
+      )}
+
+      {/* Compact tab strip replaces the sidebar on narrow viewports (R-03) */}
+      <nav
+        aria-label="Workspaces"
+        className="md:hidden flex items-center gap-1 overflow-x-auto border-b border-surface-800 bg-surface-950 px-2 py-1.5 shrink-0"
+      >
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              aria-current={isActive ? 'page' : undefined}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 transition-colors',
+                isActive
+                  ? 'bg-brand-600/15 text-brand-300'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-surface-900/60'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Main Studio Body */}
       <div className="flex flex-1 overflow-hidden">

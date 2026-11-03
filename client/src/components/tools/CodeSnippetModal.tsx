@@ -258,13 +258,13 @@ func main() {
               <h3 id="snippet-modal-title" className="text-sm font-semibold text-slate-100">
                 Code Snippet Generator
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-400">
                 Integration code for{' '}
                 <span className="font-mono text-brand-300 font-medium">
                   {tool.name}
                 </span>
                 {isRemote && (
-                  <span className="ml-2 text-[10px] font-mono text-slate-500 uppercase">
+                  <span className="ml-2 text-[10px] font-mono text-slate-400 uppercase">
                     {activeState?.config.transport} · {remoteUrl}
                   </span>
                 )}
@@ -273,6 +273,7 @@ func main() {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close snippet dialog"
             className="text-slate-400 hover:text-slate-200 p-1.5 rounded-md hover:bg-surface-800 transition-colors"
           >
             <X className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Globe, Plus, Sparkles, Terminal, X } from 'lucide-react';
+import { Download, Globe, Plus, Server, Terminal, X } from 'lucide-react';
 import { ServerConfig, TransportType } from '../../types';
 import { api } from '../../lib/api';
 import { Button } from '../ui/primitives';
@@ -230,13 +230,14 @@ export const ServerModal: React.FC<ServerModalProps> = ({
         {/* Header */}
         <div className="px-5 py-4 border-b border-surface-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand-400" />
+            <Server className="h-4 w-4 text-brand-400" />
             <h2 id="server-modal-title" className="text-sm font-semibold text-slate-100">
               MCP Server Management
             </h2>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close server dialog"
             className="text-slate-400 hover:text-slate-200 p-1.5 rounded-md hover:bg-surface-800 transition-colors"
           >
             <X className="h-4 w-4" />
@@ -290,7 +291,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                   placeholder="e.g. Local Filesystem MCP"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+                  className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                 />
               </div>
 
@@ -312,7 +313,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     <Terminal className="h-4 w-4 shrink-0 text-brand-400" />
                     <div>
                       <div className="text-xs font-semibold">stdio (Subprocess)</div>
-                      <div className="text-[11px] text-slate-500">npx, python, node, uvx</div>
+                      <div className="text-[11px] text-slate-400">npx, python, node, uvx</div>
                     </div>
                   </button>
 
@@ -329,7 +330,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     <Globe className="h-4 w-4 shrink-0 text-brand-400" />
                     <div>
                       <div className="text-xs font-semibold">SSE (Remote HTTP)</div>
-                      <div className="text-[11px] text-slate-500">Server-Sent Events URL</div>
+                      <div className="text-[11px] text-slate-400">Server-Sent Events URL</div>
                     </div>
                   </button>
                 </div>
@@ -347,7 +348,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="npx or python or node"
                       value={command}
                       onChange={(e) => setCommand(e.target.value)}
-                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                     />
                   </div>
                   <div>
@@ -360,7 +361,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="-y @modelcontextprotocol/server-filesystem C:\Path"
                       value={argsStr}
                       onChange={(e) => setArgsStr(e.target.value)}
-                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                     />
                   </div>
                   <div>
@@ -373,7 +374,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                       placeholder="API_KEY=xyz123&#10;DEBUG=true"
                       value={envStr}
                       onChange={(e) => setEnvStr(e.target.value)}
-                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
+                      className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-xs font-mono text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60 resize-none"
                     />
                   </div>
                 </>
@@ -388,7 +389,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                     placeholder="http://localhost:8000/sse"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+                    className="w-full bg-surface-900 border border-surface-800 rounded-md px-3.5 py-2 text-sm text-slate-200 font-mono placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
                   />
                 </div>
               )}
@@ -411,11 +412,11 @@ export const ServerModal: React.FC<ServerModalProps> = ({
               </p>
 
               {isLoadingDetected ? (
-                <div className="py-8 text-center text-xs text-slate-500 font-mono">
+                <div className="py-8 text-center text-xs text-slate-400 font-mono">
                   Scanning config files...
                 </div>
               ) : detectedConfigs.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500 bg-surface-900/40 border border-surface-800 rounded-lg">
+                <div className="py-8 text-center text-xs text-slate-400 bg-surface-900/40 border border-surface-800 rounded-lg">
                   No existing MCP configuration files found on standard system paths.
                 </div>
               ) : (
@@ -426,7 +427,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                         <span className="capitalize text-brand-300 font-semibold">
                           {group.source} Config
                         </span>
-                        <span className="text-[11px] font-mono text-slate-500 truncate max-w-[280px]">
+                        <span className="text-[11px] font-mono text-slate-400 truncate max-w-[280px]">
                           {group.filePath}
                         </span>
                       </div>
@@ -450,7 +451,7 @@ export const ServerModal: React.FC<ServerModalProps> = ({
                             />
                             <div className="flex-1 truncate">
                               <div className="text-xs font-medium text-slate-200">{s.name}</div>
-                              <div className="text-[11px] font-mono text-slate-500 truncate">
+                              <div className="text-[11px] font-mono text-slate-400 truncate">
                                 {s.command} {s.args?.join(' ')}
                               </div>
                             </div>

@@ -23,7 +23,7 @@ interface TrafficViewProps {
   activeServerId?: string;
 }
 
-/** Max rows rendered at once — beyond this the list is windowed. */
+/** Max rows rendered at once; beyond this the list is windowed. */
 const RENDER_WINDOW = 200;
 
 export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear, activeServerId }) => {
@@ -120,19 +120,19 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear, activeS
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
       {/* Live feed */}
-      <div className="w-[420px] border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+      <div className="w-full lg:w-[420px] max-h-[45vh] lg:max-h-none border-b lg:border-b-0 lg:border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
         <div className="p-3 border-b border-surface-800 space-y-2">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Filter traffic..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+                className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
               />
             </div>
 
@@ -204,7 +204,7 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear, activeS
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {visibleLogs.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-500 font-mono">
+            <div className="p-8 text-center text-xs text-slate-400 font-mono">
               No JSON-RPC traffic recorded yet.
             </div>
           ) : (
@@ -246,13 +246,13 @@ export const TrafficView: React.FC<TrafficViewProps> = ({ logs, onClear, activeS
                       {log.isError && (
                         <span className="text-rose-400 font-bold">ERR</span>
                       )}
-                      <span className="text-slate-500">
+                      <span className="text-slate-400">
                         {new Date(log.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-[11px] font-mono text-slate-500 truncate mt-1.5">
+                  <div className="text-[11px] font-mono text-slate-400 truncate mt-1.5">
                     {JSON.stringify(log.data)}
                   </div>
                 </button>

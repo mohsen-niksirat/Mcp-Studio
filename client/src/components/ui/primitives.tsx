@@ -15,8 +15,10 @@ export interface ButtonProps
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
+  // Dark ink on the emerald signal color passes WCAG AA (~7.9:1);
+  // white-on-green does not (DESIGN.md, R-25).
   primary:
-    'bg-brand-600 text-white hover:bg-brand-500 shadow-sm shadow-brand-600/30 disabled:opacity-50 disabled:shadow-none',
+    'bg-brand-500 text-surface-950 hover:bg-brand-400 disabled:opacity-50',
   secondary:
     'bg-surface-800 text-slate-200 border border-surface-700 hover:bg-surface-700 hover:border-surface-600 disabled:opacity-50',
   ghost:
@@ -24,7 +26,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   danger:
     'bg-rose-600/15 text-rose-300 border border-rose-500/30 hover:bg-rose-600/25 hover:text-rose-200 disabled:opacity-50',
   success:
-    'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm shadow-emerald-600/30 disabled:opacity-50'
+    'bg-emerald-500 text-surface-950 hover:bg-emerald-400 disabled:opacity-50'
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -145,12 +147,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => (
   <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-3">
     <div className="h-12 w-12 rounded-2xl bg-surface-900 border border-surface-800 flex items-center justify-center">
-      <Icon className="h-6 w-6 text-slate-500" />
+      <Icon className="h-6 w-6 text-slate-400" />
     </div>
     <div className="space-y-1">
       <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
       {description && (
-        <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+        <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
           {description}
         </p>
       )}

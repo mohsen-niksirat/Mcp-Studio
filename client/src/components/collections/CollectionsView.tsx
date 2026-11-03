@@ -254,9 +254,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
       {/* Suites list */}
-      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+      <div className="w-full lg:w-72 max-h-56 lg:max-h-none border-b lg:border-b-0 lg:border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
         <div className="p-3 border-b border-surface-800 flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
             <ListChecks className="h-4 w-4 text-brand-400" />
@@ -343,7 +343,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-1 truncate">
+              <p className="text-xs text-slate-400 mt-1 truncate">
                 {selectedSuite.description}
               </p>
             </div>
@@ -486,7 +486,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({ tools }) => {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="font-mono text-xs font-semibold text-slate-500">
+                        <span className="font-mono text-xs font-semibold text-slate-400">
                           #{idx + 1}
                         </span>
                         <div className="flex items-center gap-2 min-w-0">

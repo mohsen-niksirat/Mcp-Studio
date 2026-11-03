@@ -33,7 +33,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/servers`, { signal: AbortSignal.timeout(2000) });
         if (!res.ok) {
-          // The backend answered (e.g. a 500 during startup) — it exists, so
+          // The backend answered (e.g. a 500 during startup), so it exists;
           // this must never fall back to the in-browser mock.
           sawResponse = true;
           continue;

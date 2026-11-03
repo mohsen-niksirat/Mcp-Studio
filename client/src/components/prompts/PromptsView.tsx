@@ -5,10 +5,10 @@ import {
   Check,
   Clock,
   Copy,
+  MessageSquareText,
   MessageSquare,
   Search,
   Shield,
-  Sparkles,
   User
 } from 'lucide-react';
 import { PromptItem } from '../../types';
@@ -79,7 +79,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-slate-500">
+        <div className="flex flex-col items-center gap-3 text-slate-400">
           <Spinner />
           <span className="text-xs font-mono">Loading prompts...</span>
         </div>
@@ -94,18 +94,19 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
   );
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
       {/* Prompt list */}
-      <div className="w-72 border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
+      <div className="w-full lg:w-72 max-h-56 lg:max-h-none border-b lg:border-b-0 lg:border-r border-surface-800 bg-surface-950 flex flex-col shrink-0">
         <div className="p-3 border-b border-surface-800">
           <div className="relative">
-            <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search prompts..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
+              aria-label="Search prompts"
+              className="w-full bg-surface-900 border border-surface-800 rounded-md pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500/60"
             />
           </div>
         </div>
@@ -117,6 +118,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
               <button
                 key={p.name}
                 onClick={() => handleSelectPrompt(p)}
+                aria-current={isSelected ? 'true' : undefined}
                 className={cn(
                   'w-full text-left p-2.5 rounded-lg transition-colors',
                   isSelected
@@ -125,10 +127,10 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <Sparkles
+                  <MessageSquareText
                     className={cn(
                       'h-3.5 w-3.5 shrink-0',
-                      isSelected ? 'text-brand-400' : 'text-slate-500'
+                      isSelected ? 'text-brand-400' : 'text-slate-400'
                     )}
                   />
                   <span className="font-mono text-xs font-semibold truncate">
@@ -136,7 +138,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                   </span>
                 </div>
                 {p.description && (
-                  <p className="text-[11px] text-slate-500 truncate mt-1 pl-5">
+                  <p className="text-[11px] text-slate-400 truncate mt-1 pl-5">
                     {p.description}
                   </p>
                 )}
@@ -147,9 +149,9 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
       </div>
 
       {selectedPrompt && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* Arguments */}
-          <div className="w-96 border-r border-surface-800 p-5 overflow-y-auto bg-surface-950 shrink-0 space-y-4">
+          <div className="w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-surface-800 p-4 lg:p-5 overflow-y-auto bg-surface-950 shrink-0 space-y-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-bold text-slate-100 truncate">
@@ -160,7 +162,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                 </Badge>
               </div>
               {selectedPrompt.description && (
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-slate-400 leading-relaxed">
                   {selectedPrompt.description}
                 </p>
               )}
@@ -170,7 +172,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
               <div className="section-label">Arguments</div>
 
               {!selectedPrompt.arguments || selectedPrompt.arguments.length === 0 ? (
-                <div className="text-xs text-slate-500 bg-surface-900/40 p-3 rounded-lg border border-surface-800">
+                <div className="text-xs text-slate-400 bg-surface-900/40 p-3 rounded-lg border border-surface-800">
                   No arguments required for this prompt.
                 </div>
               ) : (
@@ -185,7 +187,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                       )}
                     </label>
                     {arg.description && (
-                      <p className="text-[11px] text-slate-500">{arg.description}</p>
+                      <p className="text-[11px] text-slate-400">{arg.description}</p>
                     )}
                     {arg.name === 'code' ? (
                       <textarea
@@ -259,7 +261,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
 
             <div className="flex-1 p-5 overflow-y-auto space-y-3">
               {isGenerating ? (
-                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400">
                   <Spinner />
                   <span className="text-xs font-mono">Generating prompt...</span>
                 </div>
@@ -282,7 +284,7 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                         className={cn(
                           'rounded-lg p-4 border space-y-2',
                           isSystem
-                            ? 'bg-purple-950/15 border-purple-500/25'
+                            ? 'bg-surface-900/60 border-surface-700'
                             : isUser
                             ? 'bg-brand-950/20 border-brand-500/25'
                             : 'bg-emerald-950/15 border-emerald-500/25'
@@ -290,13 +292,13 @@ export const PromptsView: React.FC<PromptsViewProps> = ({ prompts, isLoading }) 
                       >
                         <div className="flex items-center gap-2">
                           {isSystem ? (
-                            <Shield className="h-4 w-4 text-purple-400" />
+                            <Shield className="h-4 w-4 text-slate-300" />
                           ) : isUser ? (
                             <User className="h-4 w-4 text-brand-400" />
                           ) : (
                             <Bot className="h-4 w-4 text-emerald-400" />
                           )}
-                          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-300">
+                          <span className="text-[11px] font-mono font-semibold uppercase tracking-wide text-slate-300">
                             {m.role}
                           </span>
                         </div>

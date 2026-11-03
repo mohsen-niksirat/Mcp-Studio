@@ -5,9 +5,9 @@ import {
   Download,
   FolderArchive,
   ListChecks,
+  MessageSquareText,
   Plus,
   Search,
-  Sparkles,
   Trash2,
   Wrench,
   Zap
@@ -64,7 +64,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     { id: 'tab-chat', label: 'AI Chat Sandbox', type: 'Navigation', icon: Bot, action: () => onSelectTab('chat') },
     { id: 'tab-tools', label: 'Tools Runner', type: 'Navigation', icon: Wrench, action: () => onSelectTab('tools') },
     { id: 'tab-resources', label: 'Resources Explorer', type: 'Navigation', icon: FolderArchive, action: () => onSelectTab('resources') },
-    { id: 'tab-prompts', label: 'Prompt Inspector', type: 'Navigation', icon: Sparkles, action: () => onSelectTab('prompts') },
+    { id: 'tab-prompts', label: 'Prompt Inspector', type: 'Navigation', icon: MessageSquareText, action: () => onSelectTab('prompts') },
     { id: 'tab-collections', label: 'Test Suites (Runner)', type: 'Navigation', icon: ListChecks, action: () => onSelectTab('collections') },
     { id: 'tab-traffic', label: 'Protocol Inspector (Logs)', type: 'Navigation', icon: Activity, action: () => onSelectTab('traffic') },
     { id: 'tab-benchmark', label: 'Benchmark & Health Suite', type: 'Navigation', icon: Zap, action: () => onSelectTab('benchmark') },
@@ -129,7 +129,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               setSelectedIndex(0);
             }}
             onKeyDown={handleInputKeyDown}
-            className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-400 focus:outline-none"
           />
           <kbd className="px-2 py-0.5 text-[10px] font-mono bg-surface-800 border border-surface-700 rounded text-slate-400">
             ESC
@@ -139,7 +139,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         {/* Results */}
         <div className="max-h-80 overflow-y-auto p-2 space-y-0.5">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-500 font-mono">
+            <div className="p-8 text-center text-xs text-slate-400 font-mono">
               No matching commands or tools found.
             </div>
           ) : (
@@ -172,7 +172,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       'text-[10px] font-mono px-2 py-0.5 rounded-full',
                       isSelected
                         ? 'bg-brand-700/60 text-brand-100'
-                        : 'bg-surface-800 text-slate-500'
+                        : 'bg-surface-800 text-slate-400'
                     )}
                   >
                     {item.type}
@@ -184,7 +184,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-surface-800 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+        <div className="px-4 py-2 border-t border-surface-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
           <span>Navigate with ↑ ↓ and Enter</span>
           <span>MCP-Studio Quick Actions</span>
         </div>

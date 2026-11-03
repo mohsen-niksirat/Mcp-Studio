@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   }
 
@@ -16,15 +16,20 @@
 
   body {
     @apply bg-surface-950 text-slate-100 font-sans antialiased;
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'ss01';
   }
 
-  /* Subtle grid texture for hero areas */
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, rgb(30 41 59 / 0.25) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(30 41 59 / 0.25) 1px, transparent 1px);
-    background-size: 24px 24px;
+  /* One visible keyboard-focus ring for every interactive element (R-32).
+     Declared once here instead of per-component so no control can ship
+     without a focus indicator. */
+  button:focus-visible,
+  [role='button']:focus-visible,
+  a:focus-visible,
+  select:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    @apply outline-none ring-2 ring-brand-400/70 ring-offset-2 ring-offset-surface-950;
   }
 
   /* Custom scrollbar */
@@ -50,26 +55,42 @@
     scrollbar-width: thin;
     scrollbar-color: rgb(51 65 85 / 0.6) transparent;
   }
+
+  /* Non-essential motion stops when the OS asks for it (R-39). Status
+     feedback (spinner/pulse) is exempted below because it communicates
+     state, not decoration. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Touch pointers get real tap targets: the desktop density (h-8/h-9
+     buttons) stays, but coarse pointers always hit >= 44px (R-03). */
+  @media (pointer: coarse) {
+    button:not([disabled]),
+    a,
+    select,
+    [role='button']:not([disabled]) {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
 }
 
 @layer components {
-  /* Glass surface for overlays */
-  .glass {
-    @apply bg-surface-900/70 backdrop-blur-md border border-surface-800/80;
-  }
-
-  /* Focus ring used by inputs and interactive elements */
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-surface-950;
-  }
-
   /* Monospace code block */
   .code-block {
     @apply bg-surface-900/80 border border-surface-800 rounded-lg p-3 font-mono text-xs text-slate-200 overflow-x-auto;
   }
 
-  /* Section label */
+  /* Pane header label: uppercase marks section headers in a dense layout;
+     tracking stays moderate (R-06). */
   .section-label {
-    @apply text-[11px] font-semibold tracking-wider uppercase text-slate-500;
+    @apply text-[11px] font-semibold tracking-wide uppercase text-slate-400;
   }
 }
