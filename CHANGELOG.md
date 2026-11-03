@@ -5,21 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-11-02
+
+### Changed
+- **UI redesign with a documented design direction** (`DESIGN.md`): the
+  studio moves from the default indigo-on-slate look to a deliberate
+  "instrument panel" identity — emerald signal color ("run green", the
+  product's core action), IBM Plex Sans + JetBrains Mono, a request/response
+  chevron brand mark and favicon, flat surfaces without gradients or glow.
+
+### Fixed
+- **Fabricated conformance claims**: the benchmark view no longer shows
+  hardcoded green-check "protocol conformance" items that were never
+  measured; it shows real session facts (transport, negotiated protocol,
+  server, connected-since) and states plainly that only latency is measured.
+- **Text contrast below WCAG AA**: all low-contrast slate-500 text
+  (≈4.2:1) raised to slate-400 (≈7.9:1) across every view, including input
+  placeholders.
+- **No visible keyboard focus** on list buttons, tabs and chips: one global
+  `:focus-visible` ring now covers every interactive element.
+- **No responsive layout**: the desktop sidebar becomes a scrollable tab
+  strip on narrow viewports, every multi-pane view stacks vertically, and
+  touch pointers get ≥44px targets. Verified at 390px.
+- **Silent backend failure**: an app-level alert banner with a Retry button
+  appears when the backend cannot be reached.
+- **Generic "AI sparkle" icons** replaced with content-mapped glyphs;
+  decorative gradients and functionless "IDE"/"AI" capsule badges removed;
+  the one-off purple hue is gone from the palette.
+- **Accessibility details**: icon-only buttons carry `aria-label`, list
+  items expose `aria-current`, `prefers-reduced-motion` disables
+  non-essential motion, and the palette hint shows `Ctrl K` on non-Apple
+  platforms.
+
 ## [1.5.2] - 2026-11-02
 
 ### Fixed
 - **Windows release archive was broken**: the desktop zip shipped
-  `server/dist` without `node_modules`, so the launcher's
-  `node server/dist/index.js` failed with `Cannot find module 'express'`
-  and the app opened an error page. The release build now bundles the
-  server into a single self-contained `index.js` (all runtime
-  dependencies inlined via esbuild), so the archive runs with nothing but
-  Node.js installed. v1.5.1 archives are affected — use this release.
-
-## [1.5.2] - 2026-11-02
-
-### Fixed
-- **Release archive was broken**: the Windows desktop package shipped
   `server/dist` without `node_modules`, so `MCP-Studio.exe` launched a
   server that died instantly with `Cannot find module 'express'` and the
   browser opened an error page. The release build now bundles the backend

@@ -1,6 +1,6 @@
 {
   "name": "mcp-studio-server",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Backend bridge and protocol manager for MCP-Studio",
   "main": "dist/index.js",
   "scripts": {
